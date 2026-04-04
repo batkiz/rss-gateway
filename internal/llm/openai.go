@@ -21,43 +21,36 @@ type OpenAIProcessor struct {
 	client  *http.Client
 }
 
-type responsesRequest struct {
-	Model           string             `json:"model"`
-	Instructions    string             `json:"instructions,omitempty"`
-	Input           []responsesMessage `json:"input"`
-	Temperature     *float64           `json:"temperature,omitempty"`
-	MaxOutputTokens int                `json:"max_output_tokens,omitempty"`
-	Text            *responsesText     `json:"text,omitempty"`
+type chatCompletionsRequest struct {
+	Model               string              `json:"model"`
+	Messages            []chatMessage       `json:"messages"`
+	Temperature         *float64            `json:"temperature,omitempty"`
+	MaxCompletionTokens int                 `json:"max_completion_tokens,omitempty"`
+	ResponseFormat      *chatResponseFormat `json:"response_format,omitempty"`
 }
 
-type responsesText struct {
-	Format responsesFormat `json:"format"`
+type chatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
-type responsesFormat struct {
-	Type   string         `json:"type"`
+type chatResponseFormat struct {
+	Type       string         `json:"type"`
+	JSONSchema jsonSchemaSpec `json:"json_schema"`
+}
+
+type jsonSchemaSpec struct {
 	Name   string         `json:"name"`
 	Strict bool           `json:"strict"`
 	Schema map[string]any `json:"schema"`
 }
 
-type responsesMessage struct {
-	Role    string                 `json:"role"`
-	Content []responsesContentPart `json:"content"`
-}
-
-type responsesContentPart struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
-type responsesAPIResponse struct {
-	Output []struct {
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-	} `json:"output"`
+type chatCompletionsResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
 }
 
 func NewOpenAIProcessor(cfg config.LLMConfig) (*OpenAIProcessor, error) {
@@ -74,13 +67,15 @@ func NewOpenAIProcessor(cfg config.LLMConfig) (*OpenAIProcessor, error) {
 }
 
 func (p *OpenAIProcessor) Process(ctx context.Context, req model.ProcessRequest) (model.ProcessResponse, error) {
-	payload := responsesRequest{
-		Model:           p.model,
-		Instructions:    buildInstructions(req),
-		Input:           []responsesMessage{{Role: "user", Content: []responsesContentPart{{Type: "input_text", Text: buildUserPrompt(req)}}}},
-		Temperature:     req.Temperature,
-		MaxOutputTokens: req.MaxOutputTokens,
-		Text:            buildTextConfig(req.OutputSchema),
+	payload := chatCompletionsRequest{
+		Model: p.model,
+		Messages: []chatMessage{
+			{Role: "system", Content: buildInstructions(req)},
+			{Role: "user", Content: buildUserPrompt(req)},
+		},
+		Temperature:         req.Temperature,
+		MaxCompletionTokens: req.MaxOutputTokens,
+		ResponseFormat:      buildResponseFormat(req.OutputSchema),
 	}
 
 	body, err := json.Marshal(payload)
@@ -88,7 +83,7 @@ func (p *OpenAIProcessor) Process(ctx context.Context, req model.ProcessRequest)
 		return model.ProcessResponse{}, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/responses", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return model.ProcessResponse{}, err
 	}
@@ -109,14 +104,17 @@ func (p *OpenAIProcessor) Process(ctx context.Context, req model.ProcessRequest)
 		return model.ProcessResponse{}, fmt.Errorf("openai status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	var apiResp responsesAPIResponse
+	var apiResp chatCompletionsResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
 		return model.ProcessResponse{}, fmt.Errorf("decode openai response: %w", err)
 	}
+	if len(apiResp.Choices) == 0 {
+		return model.ProcessResponse{}, fmt.Errorf("openai response missing choices")
+	}
 
-	text := collectOutputText(apiResp)
+	text := strings.TrimSpace(apiResp.Choices[0].Message.Content)
 	if text == "" {
-		return model.ProcessResponse{}, fmt.Errorf("openai response missing text output")
+		return model.ProcessResponse{}, fmt.Errorf("openai response missing message content")
 	}
 
 	parsed, err := parseStructuredResult(text, req.OutputSchema)
@@ -156,7 +154,7 @@ func buildUserPrompt(req model.ProcessRequest) string {
 	return strings.Join(parts, "\n")
 }
 
-func buildTextConfig(schema model.OutputSchema) *responsesText {
+func buildResponseFormat(schema model.OutputSchema) *chatResponseFormat {
 	if len(schema.Fields) == 0 {
 		return nil
 	}
@@ -181,9 +179,9 @@ func buildTextConfig(schema model.OutputSchema) *responsesText {
 		}
 	}
 
-	return &responsesText{
-		Format: responsesFormat{
-			Type:   "json_schema",
+	return &chatResponseFormat{
+		Type: "json_schema",
+		JSONSchema: jsonSchemaSpec{
 			Name:   schema.Name,
 			Strict: true,
 			Schema: map[string]any{
@@ -214,18 +212,6 @@ func parseStructuredResult(raw string, schema model.OutputSchema) (model.Process
 		Summary: strings.TrimSpace(summary),
 		Content: strings.TrimSpace(content),
 	}, nil
-}
-
-func collectOutputText(resp responsesAPIResponse) string {
-	var builder strings.Builder
-	for _, output := range resp.Output {
-		for _, part := range output.Content {
-			if part.Type == "output_text" || part.Type == "text" {
-				builder.WriteString(part.Text)
-			}
-		}
-	}
-	return strings.TrimSpace(builder.String())
 }
 
 func stringValue(value any) string {

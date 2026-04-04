@@ -3,13 +3,18 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
+
+	"github.com/batkiz/rss-gateway/internal/model"
 	"github.com/batkiz/rss-gateway/internal/pipeline"
 	"github.com/batkiz/rss-gateway/internal/rssout"
+	"github.com/batkiz/rss-gateway/internal/ui"
 )
 
 type Handler struct {
@@ -23,13 +28,14 @@ func New(service *pipeline.Service) *Handler {
 func (h *Handler) Router() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.handleHealth)
+	mux.HandleFunc("/admin", h.handleAdminPage)
 	mux.HandleFunc("/admin/status", h.handleStatus)
 	mux.HandleFunc("/admin/refresh", h.handleRefresh)
 	mux.HandleFunc("/admin/reprocess", h.handleReprocess)
 	mux.HandleFunc("/admin/raw-items", h.handleRawItems)
 	mux.HandleFunc("/feeds/", h.handleFeed)
 	mux.HandleFunc("/sources", h.handleSources)
-	return mux
+	return requestLogger(mux)
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -38,6 +44,17 @@ func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 func (h *Handler) handleSources(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, h.service.Sources())
+}
+
+func (h *Handler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		h.renderAdminPage(w, r, r.URL.Query().Get("message"), r.URL.Query().Get("error"))
+	case http.MethodPost:
+		h.handleAdminAction(w, r)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
 
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -54,6 +71,49 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
+func (h *Handler) handleAdminAction(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.redirectAdmin(w, r, r.FormValue("source"), "", "invalid form data")
+		return
+	}
+
+	action := r.FormValue("action")
+	sourceID := r.FormValue("source")
+	limit := positiveInt(r.FormValue("limit"), 10)
+	log.Printf("admin action=%s source=%s limit=%d", action, sourceID, limit)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+
+	var message string
+	var err error
+	switch action {
+	case "refresh":
+		err = h.service.RefreshSource(ctx, sourceID)
+		if err == nil {
+			message = "refreshed source " + sourceID
+		}
+	case "refresh_all":
+		err = h.service.RefreshAll(ctx)
+		if err == nil {
+			message = "refreshed all enabled sources"
+		}
+	case "reprocess":
+		err = h.service.ReprocessSource(ctx, sourceID, limit)
+		if err == nil {
+			message = "reprocessed source " + sourceID
+		}
+	default:
+		h.redirectAdmin(w, r, sourceID, "", "unknown admin action")
+		return
+	}
+
+	if err != nil {
+		h.redirectAdmin(w, r, sourceID, "", err.Error())
+		return
+	}
+	h.redirectAdmin(w, r, sourceID, message, "")
+}
+
 func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -61,6 +121,7 @@ func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sourceID := r.URL.Query().Get("source")
+	log.Printf("api refresh requested source=%s", sourceID)
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 
@@ -93,6 +154,7 @@ func (h *Handler) handleReprocess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit := intQuery(r, "limit", 0)
+	log.Printf("api reprocess requested source=%s limit=%d", sourceID, limit)
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
 
@@ -116,6 +178,7 @@ func (h *Handler) handleRawItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit := intQuery(r, "limit", 20)
+	log.Printf("api raw-items requested source=%s limit=%d", sourceID, limit)
 	items, err := h.service.ListRawItems(r.Context(), sourceID, limit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -142,6 +205,7 @@ func (h *Handler) handleFeed(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	log.Printf("feed requested source=%s max_items=%d", sourceID, source.MaxItems)
 
 	items, err := h.service.ListProcessedItems(r.Context(), sourceID, source.MaxItems)
 	if err != nil {
@@ -179,4 +243,75 @@ func intQuery(r *http.Request, key string, defaultValue int) int {
 		return defaultValue
 	}
 	return value
+}
+
+func positiveInt(value string, defaultValue int) int {
+	if strings.TrimSpace(value) == "" {
+		return defaultValue
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return defaultValue
+	}
+	return parsed
+}
+
+func (h *Handler) renderAdminPage(w http.ResponseWriter, r *http.Request, message, errText string) {
+	selectedSource := r.URL.Query().Get("source")
+	status, err := h.service.FeedStatus(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if selectedSource == "" {
+		for id := range h.service.Sources() {
+			selectedSource = id
+			break
+		}
+	}
+
+	rawItems := make([]model.RawItem, 0)
+	if selectedSource != "" {
+		rawItems, err = h.service.ListRawItems(r.Context(), selectedSource, 8)
+		if err != nil {
+			errText = err.Error()
+		}
+	}
+
+	vm := ui.BuildAdminPageView(r, h.service.Sources(), status, rawItems, selectedSource, message, errText)
+	templ.Handler(ui.AdminPage(vm)).ServeHTTP(w, r)
+}
+
+func (h *Handler) redirectAdmin(w http.ResponseWriter, r *http.Request, sourceID, message, errText string) {
+	values := r.URL.Query()
+	if sourceID != "" {
+		values.Set("source", sourceID)
+	}
+	if message != "" {
+		values.Set("message", message)
+	}
+	if errText != "" {
+		values.Set("error", errText)
+	}
+	http.Redirect(w, r, "/admin?"+values.Encode(), http.StatusSeeOther)
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		log.Printf("http method=%s path=%s status=%d remote=%s duration=%s", r.Method, r.URL.RequestURI(), recorder.status, r.RemoteAddr, time.Since(start).Round(time.Millisecond))
+	})
 }

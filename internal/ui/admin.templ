@@ -1,0 +1,273 @@
+package ui
+
+import (
+	"fmt"
+
+	"github.com/templui/templui/components/badge"
+	"github.com/templui/templui/components/button"
+	"github.com/templui/templui/components/card"
+	"github.com/templui/templui/components/table"
+)
+
+templ AdminPage(vm AdminPageView) {
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>rss-gateway admin</title>
+			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+			<style type="text/tailwindcss">
+				@theme inline {
+					--color-background: var(--background);
+					--color-foreground: var(--foreground);
+					--color-card: var(--card);
+					--color-card-foreground: var(--card-foreground);
+					--color-primary: var(--primary);
+					--color-primary-foreground: var(--primary-foreground);
+					--color-secondary: var(--secondary);
+					--color-secondary-foreground: var(--secondary-foreground);
+					--color-muted: var(--muted);
+					--color-muted-foreground: var(--muted-foreground);
+					--color-accent: var(--accent);
+					--color-accent-foreground: var(--accent-foreground);
+					--color-border: var(--border);
+					--color-input: var(--input);
+					--color-ring: var(--ring);
+					--color-destructive: var(--destructive);
+				}
+				:root {
+					--background: oklch(0.99 0.01 95);
+					--foreground: oklch(0.2 0.02 250);
+					--card: oklch(0.995 0.005 95);
+					--card-foreground: oklch(0.2 0.02 250);
+					--primary: oklch(0.55 0.13 210);
+					--primary-foreground: oklch(0.99 0.01 95);
+					--secondary: oklch(0.94 0.02 110);
+					--secondary-foreground: oklch(0.25 0.02 250);
+					--muted: oklch(0.96 0.01 95);
+					--muted-foreground: oklch(0.47 0.02 250);
+					--accent: oklch(0.92 0.04 190);
+					--accent-foreground: oklch(0.22 0.02 250);
+					--destructive: oklch(0.62 0.22 25);
+					--border: oklch(0.89 0.01 95);
+					--input: oklch(0.89 0.01 95);
+					--ring: oklch(0.62 0.1 210);
+				}
+				body {
+					font-family: "Iosevka Etoile", "IBM Plex Sans", "Segoe UI", sans-serif;
+					background:
+						radial-gradient(circle at top left, rgba(34, 160, 214, 0.16), transparent 28%),
+						radial-gradient(circle at bottom right, rgba(166, 196, 106, 0.18), transparent 24%),
+						linear-gradient(180deg, rgba(255,255,255,0.92), rgba(248,250,245,0.98));
+				}
+			</style>
+		</head>
+		<body class="min-h-screen bg-background text-foreground">
+			<div class="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+				<div class="grid gap-6 lg:grid-cols-[1.4fr_0.8fr]">
+					@card.Card(card.Props{Class: "border-border/70 bg-card/95 backdrop-blur"}) {
+						@card.Header(card.HeaderProps{Class: "gap-3"}) {
+							<div class="flex items-center justify-between gap-4">
+								<div>
+									<div class="text-xs uppercase tracking-[0.24em] text-muted-foreground">Control Plane</div>
+									@card.Title() {
+										<div class="text-3xl font-semibold tracking-tight">rss-gateway</div>
+									}
+									@card.Description() {
+										<div class="max-w-2xl text-sm text-muted-foreground">A simple admin surface for feed status, manual refresh, reprocessing, and output inspection.</div>
+									}
+								</div>
+								@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "text-xs"}) {
+									Generated { vm.GeneratedAt.Format("15:04:05") }
+								}
+							</div>
+						}
+						@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-5 sm:grid-cols-3"}) {
+							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
+								<div class="text-xs uppercase tracking-wider text-muted-foreground">Sources</div>
+								<div class="mt-2 text-3xl font-semibold">{ fmt.Sprintf("%d", len(vm.Sources)) }</div>
+							</div>
+							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
+								<div class="text-xs uppercase tracking-wider text-muted-foreground">Selected Feed</div>
+								<div class="mt-2 text-lg font-semibold">{ selectedSourceTitle(vm) }</div>
+								<div class="mt-1 text-sm text-muted-foreground">{ selectedSourceMode(vm) }</div>
+							</div>
+							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
+								<div class="text-xs uppercase tracking-wider text-muted-foreground">Stored Items</div>
+								<div class="mt-2 text-lg font-semibold">{ selectedSourceStats(vm) }</div>
+							</div>
+						}
+					}
+					@card.Card(card.Props{Class: "border-border/70 bg-card/95 backdrop-blur"}) {
+						@card.Header(card.HeaderProps{Class: "gap-2"}) {
+							@card.Title() {
+								<div class="text-xl font-semibold">Quick Actions</div>
+							}
+							@card.Description() {
+								<div class="text-sm text-muted-foreground">Run against one source at a time. The JSON admin APIs stay available under the same `/admin/*` paths.</div>
+							}
+						}
+						@card.Content(card.ContentProps{Class: "grid gap-3 p-6 pt-2"}) {
+							<form method="get" action="/admin" class="grid gap-2">
+								<label class="text-sm font-medium" for="source">Source</label>
+								<select id="source" name="source" class="rounded-md border border-input bg-background px-3 py-2 text-sm">
+									for _, source := range vm.Sources {
+										if source.ID == vm.SelectedSource {
+											<option value={ source.ID } selected>{ source.Name }</option>
+										} else {
+											<option value={ source.ID }>{ source.Name }</option>
+										}
+									}
+								</select>
+								@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantSecondary, Class: "justify-start"}) {
+									Open Source View
+								}
+							</form>
+							<form method="post" action="/admin" class="grid gap-2">
+								<input type="hidden" name="action" value="refresh"/>
+								<input type="hidden" name="source" value={ vm.SelectedSource }/>
+								@button.Button(button.Props{Type: button.TypeSubmit, Class: "justify-start"}) {
+									Refresh Selected Source
+								}
+							</form>
+							<form method="post" action="/admin" class="grid gap-2">
+								<input type="hidden" name="action" value="reprocess"/>
+								<input type="hidden" name="source" value={ vm.SelectedSource }/>
+								<div class="flex gap-2">
+									<input type="number" name="limit" min="1" max="100" value="10" class="w-24 rounded-md border border-input bg-background px-3 py-2 text-sm"/>
+									@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline, Class: "justify-start"}) {
+										Reprocess Recent Items
+									}
+								</div>
+							</form>
+							<form method="post" action="/admin" class="grid gap-2">
+								<input type="hidden" name="action" value="refresh_all"/>
+								@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantGhost, Class: "justify-start"}) {
+									Refresh All Enabled Sources
+								}
+							</form>
+							if vm.Message != "" {
+								<div class="rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-foreground">{ vm.Message }</div>
+							}
+							if vm.Error != "" {
+								<div class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-foreground">{ vm.Error }</div>
+							}
+						}
+					}
+				</div>
+
+				<div class="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+					@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
+						@card.Header() {
+							<div class="flex items-center justify-between gap-4">
+								<div>
+									@card.Title() {
+										<div class="text-xl font-semibold">Source Status</div>
+									}
+									@card.Description() {
+										<div class="text-sm text-muted-foreground">Current state from SQLite, merged with configured source metadata.</div>
+									}
+								</div>
+								<a href="/admin/status" class="text-sm text-primary underline-offset-4 hover:underline">JSON</a>
+							</div>
+						}
+						@card.Content(card.ContentProps{Class: "overflow-x-auto p-6 pt-0"}) {
+							@table.Table(table.Props{}) {
+								@table.Header() {
+									@table.Row() {
+										@table.Head() { Source }
+										@table.Head() { Mode }
+										@table.Head() { State }
+										@table.Head() { Last Success }
+										@table.Head() { Counts }
+										@table.Head() { Feed }
+									}
+								}
+								@table.Body() {
+									for _, source := range vm.Sources {
+										@table.Row(table.RowProps{Selected: source.ID == vm.SelectedSource}) {
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<div class="flex flex-col gap-1">
+													<a href={ "/admin?source=" + source.ID } class="font-medium underline-offset-4 hover:underline">{ source.Name }</a>
+													<div class="text-xs text-muted-foreground">{ source.ID }</div>
+													<a href={ source.URL } class="max-w-[18rem] truncate text-xs text-muted-foreground underline-offset-4 hover:underline">{ source.URL }</a>
+												</div>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<div class="flex flex-col gap-2">
+													@badge.Badge(badge.Props{Variant: badge.VariantOutline}) { source.Mode }
+													if source.Enabled {
+														@badge.Badge(badge.Props{Variant: badgeVariant(true)}) { enabled }
+													} else {
+														@badge.Badge(badge.Props{Variant: badgeVariant(false)}) { disabled }
+													}
+												</div>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												if source.LastError != "" {
+													<div class="flex flex-col gap-2">
+														@badge.Badge(badge.Props{Variant: errorBadgeVariant(true)}) { error }
+														<div class="max-w-[16rem] text-xs text-muted-foreground">{ shorten(source.LastError, 140) }</div>
+													</div>
+												} else {
+													@badge.Badge(badge.Props{Variant: errorBadgeVariant(false)}) { healthy }
+												}
+											}
+											@table.Cell(table.CellProps{Class: "align-top text-sm text-muted-foreground"}) {
+												{ source.LastSuccessLabel }
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<div class="text-sm">
+													<div>{ fmt.Sprintf("%d fetched", source.LastFetchedCount) }</div>
+													<div>{ fmt.Sprintf("%d processed", source.LastProcessedCount) }</div>
+													<div>{ fmt.Sprintf("%d raw / %d rss", source.RawItemCount, source.ProcessedItemCount) }</div>
+												</div>
+											}
+											@table.Cell(table.CellProps{Class: "align-top"}) {
+												<a href={ source.FeedURL } class="text-sm text-primary underline-offset-4 hover:underline">open feed</a>
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+
+					@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
+						@card.Header() {
+							@card.Title() {
+								<div class="text-xl font-semibold">Selected Source</div>
+							}
+							@card.Description() {
+								<div class="text-sm text-muted-foreground">Recent raw items stored before LLM processing.</div>
+							}
+						}
+						@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-0"}) {
+							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
+								<div class="text-xs uppercase tracking-wider text-muted-foreground">Feed Output</div>
+								<a href={ selectedSourceFeedURL(vm) } class="mt-2 block break-all text-sm text-primary underline-offset-4 hover:underline">{ selectedSourceFeedURL(vm) }</a>
+							</div>
+							if len(vm.RawItems) == 0 {
+								<div class="rounded-xl border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">No raw items stored yet for this source.</div>
+							} else {
+								for _, item := range vm.RawItems {
+									<div class="rounded-xl border border-border/80 bg-background/60 p-4">
+										<div class="flex items-start justify-between gap-3">
+											<div class="font-medium">{ fallback(item.Title, item.GUID) }</div>
+											@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) {
+												{ item.PublishedAt.Format("01-02 15:04") }
+											}
+										</div>
+										<div class="mt-2 text-xs text-muted-foreground">{ shorten(item.Link, 80) }</div>
+										<div class="mt-3 text-sm leading-6 text-foreground/90">{ shorten(item.ContentText, 280) }</div>
+									</div>
+								}
+							}
+						}
+					}
+				</div>
+			</div>
+		</body>
+	</html>
+}

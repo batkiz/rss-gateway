@@ -6,8 +6,8 @@ import (
 	"github.com/batkiz/rss-gateway/internal/model"
 )
 
-func TestBuildTextConfig(t *testing.T) {
-	cfg := buildTextConfig(model.OutputSchema{
+func TestBuildResponseFormat(t *testing.T) {
+	cfg := buildResponseFormat(model.OutputSchema{
 		Name:         "summary",
 		TitleField:   "headline",
 		SummaryField: "summary",
@@ -22,7 +22,10 @@ func TestBuildTextConfig(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("expected schema config")
 	}
-	required := cfg.Format.Schema["required"].([]string)
+	if cfg.Type != "json_schema" {
+		t.Fatalf("unexpected response format type: %s", cfg.Type)
+	}
+	required := cfg.JSONSchema.Schema["required"].([]string)
 	if len(required) != 3 {
 		t.Fatalf("unexpected required fields: %#v", required)
 	}

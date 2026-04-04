@@ -115,6 +115,6 @@ ghcr.io/batkiz/rss-gateway
 
 ## Notes
 
-- The OpenAI integration uses the `/responses` API and applies JSON schema via `text.format`.
+- The OpenAI integration uses the `/chat/completions` API and applies JSON schema via `response_format`.
 - Raw items are persisted first, then processed items are updated only when input content changes or a reprocess is requested.
 - If a source references an undefined mode, startup fails unless that source provides inline prompt overrides.
