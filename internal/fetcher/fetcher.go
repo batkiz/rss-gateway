@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/batkiz/rss-gateway/internal/content"
 	"github.com/batkiz/rss-gateway/internal/model"
 	"github.com/mmcdole/gofeed"
 )
@@ -39,11 +41,11 @@ func (f *Fetcher) Fetch(ctx context.Context, source model.Source) ([]model.RawIt
 		if item == nil {
 			continue
 		}
-		content := strings.TrimSpace(item.Content)
-		if content == "" {
-			content = strings.TrimSpace(item.Description)
+		contentHTML := strings.TrimSpace(item.Content)
+		if contentHTML == "" {
+			contentHTML = strings.TrimSpace(item.Description)
 		}
-		if content == "" {
+		if contentHTML == "" && strings.TrimSpace(item.Link) == "" {
 			continue
 		}
 
@@ -52,7 +54,7 @@ func (f *Fetcher) Fetch(ctx context.Context, source model.Source) ([]model.RawIt
 			guid = strings.TrimSpace(item.Link)
 		}
 		if guid == "" {
-			guid = hashString(source.ID + ":" + item.Title + ":" + content)
+			guid = hashString(source.ID + ":" + item.Title + ":" + contentHTML)
 		}
 
 		published := time.Now().UTC()
@@ -62,16 +64,31 @@ func (f *Fetcher) Fetch(ctx context.Context, source model.Source) ([]model.RawIt
 			published = item.UpdatedParsed.UTC()
 		}
 
+		contentText := content.ExtractText(contentHTML)
+		if source.ExtractFull && strings.TrimSpace(item.Link) != "" {
+			articleHTML, articleText, err := f.fetchLinkedArticle(ctx, item.Link)
+			if err == nil && strings.TrimSpace(articleText) != "" {
+				contentHTML = articleHTML
+				contentText = articleText
+			}
+		}
+		if contentText == "" {
+			continue
+		}
+
 		items = append(items, model.RawItem{
 			SourceID:    source.ID,
 			GUID:        guid,
 			Title:       strings.TrimSpace(item.Title),
 			Link:        strings.TrimSpace(item.Link),
 			Description: strings.TrimSpace(item.Description),
-			Content:     content,
+			Content:     contentText,
+			ContentHTML: contentHTML,
+			ContentText: contentText,
 			Author:      authorName(item),
 			PublishedAt: published,
-			Hash:        hashString(strings.TrimSpace(item.Title) + "\n" + content),
+			Hash:        hashString(strings.TrimSpace(item.Title) + "\n" + contentText),
+			FetchedAt:   time.Now().UTC(),
 		})
 	}
 
@@ -91,4 +108,29 @@ func authorName(item *gofeed.Item) string {
 func hashString(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+func (f *Fetcher) fetchLinkedArticle(ctx context.Context, link string) (string, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link, nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("User-Agent", "rss-gateway/0.1")
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return "", "", fmt.Errorf("fetch linked article status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return "", "", err
+	}
+
+	return content.ExtractReadableHTML(strings.NewReader(string(body)))
 }

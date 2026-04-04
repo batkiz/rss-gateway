@@ -22,9 +22,23 @@ type OpenAIProcessor struct {
 }
 
 type responsesRequest struct {
-	Model        string             `json:"model"`
-	Instructions string             `json:"instructions,omitempty"`
-	Input        []responsesMessage `json:"input"`
+	Model           string             `json:"model"`
+	Instructions    string             `json:"instructions,omitempty"`
+	Input           []responsesMessage `json:"input"`
+	Temperature     *float64           `json:"temperature,omitempty"`
+	MaxOutputTokens int                `json:"max_output_tokens,omitempty"`
+	Text            *responsesText     `json:"text,omitempty"`
+}
+
+type responsesText struct {
+	Format responsesFormat `json:"format"`
+}
+
+type responsesFormat struct {
+	Type   string         `json:"type"`
+	Name   string         `json:"name"`
+	Strict bool           `json:"strict"`
+	Schema map[string]any `json:"schema"`
 }
 
 type responsesMessage struct {
@@ -46,12 +60,6 @@ type responsesAPIResponse struct {
 	} `json:"output"`
 }
 
-type structuredResult struct {
-	Title   string `json:"title"`
-	Summary string `json:"summary"`
-	Content string `json:"content"`
-}
-
 func NewOpenAIProcessor(cfg config.LLMConfig) (*OpenAIProcessor, error) {
 	timeout, err := time.ParseDuration(cfg.Timeout)
 	if err != nil {
@@ -67,16 +75,12 @@ func NewOpenAIProcessor(cfg config.LLMConfig) (*OpenAIProcessor, error) {
 
 func (p *OpenAIProcessor) Process(ctx context.Context, req model.ProcessRequest) (model.ProcessResponse, error) {
 	payload := responsesRequest{
-		Model:        p.model,
-		Instructions: buildInstructions(req),
-		Input: []responsesMessage{
-			{
-				Role: "user",
-				Content: []responsesContentPart{
-					{Type: "input_text", Text: buildUserPrompt(req)},
-				},
-			},
-		},
+		Model:           p.model,
+		Instructions:    buildInstructions(req),
+		Input:           []responsesMessage{{Role: "user", Content: []responsesContentPart{{Type: "input_text", Text: buildUserPrompt(req)}}}},
+		Temperature:     req.Temperature,
+		MaxOutputTokens: req.MaxOutputTokens,
+		Text:            buildTextConfig(req.OutputSchema),
 	}
 
 	body, err := json.Marshal(payload)
@@ -115,36 +119,25 @@ func (p *OpenAIProcessor) Process(ctx context.Context, req model.ProcessRequest)
 		return model.ProcessResponse{}, fmt.Errorf("openai response missing text output")
 	}
 
-	var result structuredResult
-	if err := json.Unmarshal([]byte(text), &result); err != nil {
-		return model.ProcessResponse{}, fmt.Errorf("decode structured result: %w; raw=%s", err, text)
+	parsed, err := parseStructuredResult(text, req.OutputSchema)
+	if err != nil {
+		return model.ProcessResponse{}, err
 	}
-
-	if strings.TrimSpace(result.Title) == "" {
-		result.Title = req.Title
-	}
-	if strings.TrimSpace(result.Content) == "" {
-		result.Content = result.Summary
-	}
-
-	return model.ProcessResponse{
-		Title:   strings.TrimSpace(result.Title),
-		Summary: strings.TrimSpace(result.Summary),
-		Content: strings.TrimSpace(result.Content),
-		Model:   p.model,
-	}, nil
+	parsed.Model = p.model
+	parsed.OutputJSON = text
+	return parsed, nil
 }
 
 func buildInstructions(req model.ProcessRequest) string {
 	if strings.TrimSpace(req.SystemPrompt) != "" {
 		return req.SystemPrompt
 	}
-	return "You transform RSS articles into structured reader-friendly output. Return strict JSON with title, summary, content. Preserve facts and links."
+	return "You transform RSS articles into structured reader-friendly output. Preserve facts and links."
 }
 
 func buildUserPrompt(req model.ProcessRequest) string {
 	parts := []string{
-		"Return JSON only with keys: title, summary, content.",
+		"Return output that matches the configured JSON schema.",
 		"Original title: " + req.Title,
 		"Original link: " + req.Link,
 		"Article content:",
@@ -163,6 +156,66 @@ func buildUserPrompt(req model.ProcessRequest) string {
 	return strings.Join(parts, "\n")
 }
 
+func buildTextConfig(schema model.OutputSchema) *responsesText {
+	if len(schema.Fields) == 0 {
+		return nil
+	}
+
+	properties := make(map[string]any, len(schema.Fields))
+	required := make([]string, 0, len(schema.Fields))
+	for _, field := range schema.Fields {
+		fieldType := field.Type
+		if fieldType == "" {
+			fieldType = "string"
+		}
+		property := map[string]any{
+			"type":        fieldType,
+			"description": field.Description,
+		}
+		if fieldType == "array" {
+			property["items"] = map[string]any{"type": "string"}
+		}
+		properties[field.Name] = property
+		if field.Required {
+			required = append(required, field.Name)
+		}
+	}
+
+	return &responsesText{
+		Format: responsesFormat{
+			Type:   "json_schema",
+			Name:   schema.Name,
+			Strict: true,
+			Schema: map[string]any{
+				"type":                 "object",
+				"properties":           properties,
+				"required":             required,
+				"additionalProperties": false,
+			},
+		},
+	}
+}
+
+func parseStructuredResult(raw string, schema model.OutputSchema) (model.ProcessResponse, error) {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return model.ProcessResponse{}, fmt.Errorf("decode structured result: %w; raw=%s", err, raw)
+	}
+
+	title := stringValue(payload[schema.TitleField])
+	summary := stringValue(payload[schema.SummaryField])
+	content := stringValue(payload[schema.ContentField])
+	if strings.TrimSpace(content) == "" {
+		content = summary
+	}
+
+	return model.ProcessResponse{
+		Title:   strings.TrimSpace(title),
+		Summary: strings.TrimSpace(summary),
+		Content: strings.TrimSpace(content),
+	}, nil
+}
+
 func collectOutputText(resp responsesAPIResponse) string {
 	var builder strings.Builder
 	for _, output := range resp.Output {
@@ -173,6 +226,24 @@ func collectOutputText(resp responsesAPIResponse) string {
 		}
 	}
 	return strings.TrimSpace(builder.String())
+}
+
+func stringValue(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case []any:
+		parts := make([]string, 0, len(v))
+		for _, item := range v {
+			parts = append(parts, stringValue(item))
+		}
+		return strings.Join(parts, ", ")
+	default:
+		if value == nil {
+			return ""
+		}
+		return fmt.Sprint(value)
+	}
 }
 
 func limitText(text string, maxChars int) string {

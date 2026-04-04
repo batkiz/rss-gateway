@@ -14,6 +14,13 @@ llm:
 modes:
   summary:
     system_prompt: "You transform RSS articles into concise reader-friendly summaries. Return strict JSON with title, summary, content. Preserve facts and links. Keep output compact and useful."
+    temperature: 0.2
+    max_output_tokens: 900
+    output_schema:
+      name: "summary"
+      title_field: "title"
+      summary_field: "summary"
+      content_field: "content"
     task_prompt: |
       1. Keep or lightly rewrite the title for clarity.
       2. Write a short summary in 3 to 5 sentences.
@@ -21,6 +28,18 @@ modes:
 
   translate_zh:
     system_prompt: "You transform RSS articles into Chinese reader-friendly output. Return strict JSON with title, summary, content. Preserve facts and links. Write concise simplified Chinese."
+    temperature: 0.3
+    max_output_tokens: 1200
+    output_schema:
+      name: "translate_zh"
+      title_field: "title"
+      summary_field: "summary"
+      content_field: "content"
+      extra_fields:
+        - name: "keywords"
+          type: "array"
+          description: "A short list of important keywords."
+          required: false
     task_prompt: |
       1. Rewrite the title in simplified Chinese.
       2. Write a short Chinese summary in 3 to 5 sentences.
@@ -36,6 +55,7 @@ sources:
     pipeline:
       mode: "summary"
       max_input_chars: 6000
+      extract_full_content: true
 
   - id: "lobsters-translate"
     name: "Lobsters Chinese"
@@ -46,3 +66,4 @@ sources:
     pipeline:
       mode: "translate_zh"
       max_input_chars: 6000
+      max_output_tokens: 1400

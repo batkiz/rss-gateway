@@ -44,15 +44,36 @@ type Source struct {
 }
 
 type PipelineConfig struct {
-	Mode          string `yaml:"mode"`
-	SystemPrompt  string `yaml:"system_prompt"`
-	TaskPrompt    string `yaml:"task_prompt"`
-	MaxInputChars int    `yaml:"max_input_chars"`
+	Mode               string   `yaml:"mode"`
+	SystemPrompt       string   `yaml:"system_prompt"`
+	TaskPrompt         string   `yaml:"task_prompt"`
+	MaxInputChars      int      `yaml:"max_input_chars"`
+	ExtractFullContent bool     `yaml:"extract_full_content"`
+	Temperature        *float64 `yaml:"temperature"`
+	MaxOutputTokens    int      `yaml:"max_output_tokens"`
 }
 
 type ModeConfig struct {
-	SystemPrompt string `yaml:"system_prompt"`
-	TaskPrompt   string `yaml:"task_prompt"`
+	SystemPrompt    string             `yaml:"system_prompt"`
+	TaskPrompt      string             `yaml:"task_prompt"`
+	Temperature     *float64           `yaml:"temperature"`
+	MaxOutputTokens int                `yaml:"max_output_tokens"`
+	OutputSchema    OutputSchemaConfig `yaml:"output_schema"`
+}
+
+type OutputSchemaConfig struct {
+	Name         string              `yaml:"name"`
+	TitleField   string              `yaml:"title_field"`
+	SummaryField string              `yaml:"summary_field"`
+	ContentField string              `yaml:"content_field"`
+	ExtraFields  []OutputFieldConfig `yaml:"extra_fields"`
+}
+
+type OutputFieldConfig struct {
+	Name        string `yaml:"name"`
+	Type        string `yaml:"type"`
+	Description string `yaml:"description"`
+	Required    *bool  `yaml:"required"`
 }
 
 type Duration struct {
@@ -117,6 +138,21 @@ func (c *Config) applyDefaults() {
 			c.Sources[i].Pipeline.MaxInputChars = 8000
 		}
 	}
+	for key, mode := range c.Modes {
+		if mode.OutputSchema.Name == "" {
+			mode.OutputSchema.Name = key
+		}
+		if mode.OutputSchema.TitleField == "" {
+			mode.OutputSchema.TitleField = "title"
+		}
+		if mode.OutputSchema.SummaryField == "" {
+			mode.OutputSchema.SummaryField = "summary"
+		}
+		if mode.OutputSchema.ContentField == "" {
+			mode.OutputSchema.ContentField = "content"
+		}
+		c.Modes[key] = mode
+	}
 }
 
 func (c *Config) validateAndResolve() error {
@@ -142,6 +178,32 @@ func (c *Config) validateAndResolve() error {
 		if _, ok := c.Modes[source.Pipeline.Mode]; !ok && source.Pipeline.SystemPrompt == "" && source.Pipeline.TaskPrompt == "" {
 			return fmt.Errorf("source %s references undefined mode %q", source.ID, source.Pipeline.Mode)
 		}
+	}
+	for name, mode := range c.Modes {
+		if err := validateOutputSchema(name, mode.OutputSchema); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateOutputSchema(modeName string, schema OutputSchemaConfig) error {
+	if schema.TitleField == "" || schema.SummaryField == "" || schema.ContentField == "" {
+		return fmt.Errorf("mode %s output_schema title_field, summary_field, and content_field are required", modeName)
+	}
+	seen := map[string]struct{}{
+		schema.TitleField:   {},
+		schema.SummaryField: {},
+		schema.ContentField: {},
+	}
+	for _, field := range schema.ExtraFields {
+		if field.Name == "" {
+			return fmt.Errorf("mode %s has output_schema extra field with empty name", modeName)
+		}
+		if _, ok := seen[field.Name]; ok {
+			return fmt.Errorf("mode %s has duplicate output schema field %q", modeName, field.Name)
+		}
+		seen[field.Name] = struct{}{}
 	}
 	return nil
 }

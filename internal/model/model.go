@@ -13,6 +13,9 @@ type Source struct {
 	SystemPrompt    string
 	TaskPrompt      string
 	MaxInputChars   int
+	ExtractFull     bool
+	Temperature     *float64
+	MaxOutputTokens int
 }
 
 type RawItem struct {
@@ -22,26 +25,33 @@ type RawItem struct {
 	Link        string
 	Description string
 	Content     string
+	ContentHTML string
+	ContentText string
 	Author      string
 	PublishedAt time.Time
 	Hash        string
+	FetchedAt   time.Time
 }
 
 type ProcessRequest struct {
-	Mode          string
-	Title         string
-	Link          string
-	Content       string
-	SystemPrompt  string
-	TaskPrompt    string
-	MaxInputChars int
+	Mode            string
+	Title           string
+	Link            string
+	Content         string
+	SystemPrompt    string
+	TaskPrompt      string
+	MaxInputChars   int
+	Temperature     *float64
+	MaxOutputTokens int
+	OutputSchema    OutputSchema
 }
 
 type ProcessResponse struct {
-	Title   string
-	Summary string
-	Content string
-	Model   string
+	Title      string
+	Summary    string
+	Content    string
+	Model      string
+	OutputJSON string
 }
 
 type ProcessedItem struct {
@@ -53,6 +63,34 @@ type ProcessedItem struct {
 	OutputTitle   string
 	OutputSummary string
 	OutputContent string
+	OutputJSON    string
 	Model         string
+	InputHash     string
 	ProcessedAt   time.Time
+}
+
+type OutputSchema struct {
+	Name         string
+	TitleField   string
+	SummaryField string
+	ContentField string
+	Fields       []OutputField
+}
+
+type OutputField struct {
+	Name        string
+	Type        string
+	Description string
+	Required    bool
+}
+
+type FeedState struct {
+	SourceID             string    `json:"source_id"`
+	LastSuccessAt        time.Time `json:"last_success_at"`
+	LastError            string    `json:"last_error"`
+	LastFetchedCount     int       `json:"last_fetched_count"`
+	LastProcessedCount   int       `json:"last_processed_count"`
+	LastReprocessedCount int       `json:"last_reprocessed_count"`
+	RawItemCount         int       `json:"raw_item_count"`
+	ProcessedItemCount   int       `json:"processed_item_count"`
 }
