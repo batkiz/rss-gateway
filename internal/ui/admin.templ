@@ -11,11 +11,11 @@ import (
 
 templ AdminPage(vm AdminPageView) {
 	<!doctype html>
-	<html lang="en">
+	<html lang={ vm.Lang }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<title>rss-gateway admin</title>
+			<title>{ vm.Text.PageTitle }</title>
 			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 			<style type="text/tailwindcss">
 				@theme inline {
@@ -65,52 +65,58 @@ templ AdminPage(vm AdminPageView) {
 		</head>
 		<body class="min-h-screen bg-background text-foreground">
 			<div class="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+				<div class="flex items-center justify-end gap-2 text-sm">
+					<a href={ "/admin?source=" + vm.SelectedSource + "&lang=en" } class={ langLinkClass(vm.Lang == "en") }>English</a>
+					<a href={ "/admin?source=" + vm.SelectedSource + "&lang=zh" } class={ langLinkClass(vm.Lang == "zh") }>中文</a>
+				</div>
 				<div class="grid gap-6 lg:grid-cols-[1.4fr_0.8fr]">
 					@card.Card(card.Props{Class: "border-border/70 bg-card/95 backdrop-blur"}) {
 						@card.Header(card.HeaderProps{Class: "gap-3"}) {
 							<div class="flex items-center justify-between gap-4">
 								<div>
-									<div class="text-xs uppercase tracking-[0.24em] text-muted-foreground">Control Plane</div>
+									<div class="text-xs uppercase tracking-[0.24em] text-muted-foreground">{ vm.Text.ControlPlane }</div>
 									@card.Title() {
 										<div class="text-3xl font-semibold tracking-tight">rss-gateway</div>
 									}
 									@card.Description() {
-										<div class="max-w-2xl text-sm text-muted-foreground">A simple admin surface for feed status, manual refresh, reprocessing, and output inspection.</div>
+										<div class="max-w-2xl text-sm text-muted-foreground">{ vm.Text.Subtitle }</div>
 									}
 								</div>
 								@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "text-xs"}) {
-									Generated { vm.GeneratedAt.Format("15:04:05") }
+									{ vm.Text.GeneratedAt } { vm.GeneratedAt.Format("15:04:05") }
 								}
 							</div>
 						}
 						@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-5 sm:grid-cols-3"}) {
 							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
-								<div class="text-xs uppercase tracking-wider text-muted-foreground">Sources</div>
+								<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.Sources }</div>
 								<div class="mt-2 text-3xl font-semibold">{ fmt.Sprintf("%d", len(vm.Sources)) }</div>
 							</div>
 							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
-								<div class="text-xs uppercase tracking-wider text-muted-foreground">Selected Feed</div>
+								<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.SelectedFeed }</div>
 								<div class="mt-2 text-lg font-semibold">{ selectedSourceTitle(vm) }</div>
 								<div class="mt-1 text-sm text-muted-foreground">{ selectedSourceMode(vm) }</div>
 							</div>
 							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
-								<div class="text-xs uppercase tracking-wider text-muted-foreground">Stored Items</div>
+								<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.StoredItems }</div>
 								<div class="mt-2 text-lg font-semibold">{ selectedSourceStats(vm) }</div>
+								<div class="mt-1 text-sm text-muted-foreground">{ vm.Text.RawProcessed }</div>
 							</div>
 						}
 					}
 					@card.Card(card.Props{Class: "border-border/70 bg-card/95 backdrop-blur"}) {
 						@card.Header(card.HeaderProps{Class: "gap-2"}) {
 							@card.Title() {
-								<div class="text-xl font-semibold">Quick Actions</div>
+								<div class="text-xl font-semibold">{ vm.Text.QuickActions }</div>
 							}
 							@card.Description() {
-								<div class="text-sm text-muted-foreground">Run against one source at a time. The JSON admin APIs stay available under the same `/admin/*` paths.</div>
+								<div class="text-sm text-muted-foreground">{ vm.Text.ActionsHint }</div>
 							}
 						}
 						@card.Content(card.ContentProps{Class: "grid gap-3 p-6 pt-2"}) {
 							<form method="get" action="/admin" class="grid gap-2">
-								<label class="text-sm font-medium" for="source">Source</label>
+								<input type="hidden" name="lang" value={ vm.Lang }/>
+								<label class="text-sm font-medium" for="source">{ vm.Text.Source }</label>
 								<select id="source" name="source" class="rounded-md border border-input bg-background px-3 py-2 text-sm">
 									for _, source := range vm.Sources {
 										if source.ID == vm.SelectedSource {
@@ -121,30 +127,33 @@ templ AdminPage(vm AdminPageView) {
 									}
 								</select>
 								@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantSecondary, Class: "justify-start"}) {
-									Open Source View
+									{ vm.Text.OpenSourceView }
 								}
 							</form>
 							<form method="post" action="/admin" class="grid gap-2">
+								<input type="hidden" name="lang" value={ vm.Lang }/>
 								<input type="hidden" name="action" value="refresh"/>
 								<input type="hidden" name="source" value={ vm.SelectedSource }/>
 								@button.Button(button.Props{Type: button.TypeSubmit, Class: "justify-start"}) {
-									Refresh Selected Source
+									{ vm.Text.RefreshSelected }
 								}
 							</form>
 							<form method="post" action="/admin" class="grid gap-2">
+								<input type="hidden" name="lang" value={ vm.Lang }/>
 								<input type="hidden" name="action" value="reprocess"/>
 								<input type="hidden" name="source" value={ vm.SelectedSource }/>
 								<div class="flex gap-2">
 									<input type="number" name="limit" min="1" max="100" value="10" class="w-24 rounded-md border border-input bg-background px-3 py-2 text-sm"/>
 									@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline, Class: "justify-start"}) {
-										Reprocess Recent Items
+										{ vm.Text.ReprocessRecent }
 									}
 								</div>
 							</form>
 							<form method="post" action="/admin" class="grid gap-2">
+								<input type="hidden" name="lang" value={ vm.Lang }/>
 								<input type="hidden" name="action" value="refresh_all"/>
 								@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantGhost, Class: "justify-start"}) {
-									Refresh All Enabled Sources
+									{ vm.Text.RefreshAll }
 								}
 							</form>
 							if vm.Message != "" {
@@ -163,25 +172,25 @@ templ AdminPage(vm AdminPageView) {
 							<div class="flex items-center justify-between gap-4">
 								<div>
 									@card.Title() {
-										<div class="text-xl font-semibold">Source Status</div>
+										<div class="text-xl font-semibold">{ vm.Text.SourceStatus }</div>
 									}
 									@card.Description() {
-										<div class="text-sm text-muted-foreground">Current state from SQLite, merged with configured source metadata.</div>
+										<div class="text-sm text-muted-foreground">{ vm.Text.StatusHint }</div>
 									}
 								</div>
-								<a href="/admin/status" class="text-sm text-primary underline-offset-4 hover:underline">JSON</a>
+								<a href={ "/admin/status?lang=" + vm.Lang } class="text-sm text-primary underline-offset-4 hover:underline">{ vm.Text.JSON }</a>
 							</div>
 						}
 						@card.Content(card.ContentProps{Class: "overflow-x-auto p-6 pt-0"}) {
 							@table.Table(table.Props{}) {
 								@table.Header() {
 									@table.Row() {
-										@table.Head() { Source }
-										@table.Head() { Mode }
-										@table.Head() { State }
-										@table.Head() { Last Success }
-										@table.Head() { Counts }
-										@table.Head() { Feed }
+										@table.Head() { vm.Text.Source }
+										@table.Head() { vm.Text.Mode }
+										@table.Head() { vm.Text.State }
+										@table.Head() { vm.Text.LastSuccess }
+										@table.Head() { vm.Text.Counts }
+										@table.Head() { vm.Text.Feed }
 									}
 								}
 								@table.Body() {
@@ -189,7 +198,7 @@ templ AdminPage(vm AdminPageView) {
 										@table.Row(table.RowProps{Selected: source.ID == vm.SelectedSource}) {
 											@table.Cell(table.CellProps{Class: "align-top"}) {
 												<div class="flex flex-col gap-1">
-													<a href={ "/admin?source=" + source.ID } class="font-medium underline-offset-4 hover:underline">{ source.Name }</a>
+													<a href={ "/admin?source=" + source.ID + "&lang=" + vm.Lang } class="font-medium underline-offset-4 hover:underline">{ source.Name }</a>
 													<div class="text-xs text-muted-foreground">{ source.ID }</div>
 													<a href={ source.URL } class="max-w-[18rem] truncate text-xs text-muted-foreground underline-offset-4 hover:underline">{ source.URL }</a>
 												</div>
@@ -198,20 +207,20 @@ templ AdminPage(vm AdminPageView) {
 												<div class="flex flex-col gap-2">
 													@badge.Badge(badge.Props{Variant: badge.VariantOutline}) { source.Mode }
 													if source.Enabled {
-														@badge.Badge(badge.Props{Variant: badgeVariant(true)}) { enabled }
+														@badge.Badge(badge.Props{Variant: badgeVariant(true)}) { vm.Text.Enabled }
 													} else {
-														@badge.Badge(badge.Props{Variant: badgeVariant(false)}) { disabled }
+														@badge.Badge(badge.Props{Variant: badgeVariant(false)}) { vm.Text.Disabled }
 													}
 												</div>
 											}
 											@table.Cell(table.CellProps{Class: "align-top"}) {
 												if source.LastError != "" {
 													<div class="flex flex-col gap-2">
-														@badge.Badge(badge.Props{Variant: errorBadgeVariant(true)}) { error }
+														@badge.Badge(badge.Props{Variant: errorBadgeVariant(true)}) { vm.Text.Error }
 														<div class="max-w-[16rem] text-xs text-muted-foreground">{ shorten(source.LastError, 140) }</div>
 													</div>
 												} else {
-													@badge.Badge(badge.Props{Variant: errorBadgeVariant(false)}) { healthy }
+													@badge.Badge(badge.Props{Variant: errorBadgeVariant(false)}) { vm.Text.Healthy }
 												}
 											}
 											@table.Cell(table.CellProps{Class: "align-top text-sm text-muted-foreground"}) {
@@ -219,13 +228,13 @@ templ AdminPage(vm AdminPageView) {
 											}
 											@table.Cell(table.CellProps{Class: "align-top"}) {
 												<div class="text-sm">
-													<div>{ fmt.Sprintf("%d fetched", source.LastFetchedCount) }</div>
-													<div>{ fmt.Sprintf("%d processed", source.LastProcessedCount) }</div>
-													<div>{ fmt.Sprintf("%d raw / %d rss", source.RawItemCount, source.ProcessedItemCount) }</div>
+													<div>{ fmt.Sprintf("%d %s", source.LastFetchedCount, vm.Text.Fetched) }</div>
+													<div>{ fmt.Sprintf("%d %s", source.LastProcessedCount, vm.Text.Processed) }</div>
+													<div>{ fmt.Sprintf("%d / %d", source.RawItemCount, source.ProcessedItemCount) }</div>
 												</div>
 											}
 											@table.Cell(table.CellProps{Class: "align-top"}) {
-												<a href={ source.FeedURL } class="text-sm text-primary underline-offset-4 hover:underline">open feed</a>
+												<a href={ source.FeedURL } class="text-sm text-primary underline-offset-4 hover:underline">{ vm.Text.OpenFeed }</a>
 											}
 										}
 									}
@@ -237,19 +246,19 @@ templ AdminPage(vm AdminPageView) {
 					@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
 						@card.Header() {
 							@card.Title() {
-								<div class="text-xl font-semibold">Selected Source</div>
+								<div class="text-xl font-semibold">{ vm.Text.SelectedSource }</div>
 							}
 							@card.Description() {
-								<div class="text-sm text-muted-foreground">Recent raw items stored before LLM processing.</div>
+								<div class="text-sm text-muted-foreground">{ vm.Text.RecentRawItems }</div>
 							}
 						}
 						@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-0"}) {
 							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
-								<div class="text-xs uppercase tracking-wider text-muted-foreground">Feed Output</div>
+								<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.FeedOutput }</div>
 								<a href={ selectedSourceFeedURL(vm) } class="mt-2 block break-all text-sm text-primary underline-offset-4 hover:underline">{ selectedSourceFeedURL(vm) }</a>
 							</div>
 							if len(vm.RawItems) == 0 {
-								<div class="rounded-xl border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">No raw items stored yet for this source.</div>
+								<div class="rounded-xl border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">{ vm.Text.NoRawItems }</div>
 							} else {
 								for _, item := range vm.RawItems {
 									<div class="rounded-xl border border-border/80 bg-background/60 p-4">

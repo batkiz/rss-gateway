@@ -3,87 +3,90 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
-	Server  ServerConfig          `yaml:"server"`
-	Storage StorageConfig         `yaml:"storage"`
-	LLM     LLMConfig             `yaml:"llm"`
-	Modes   map[string]ModeConfig `yaml:"modes"`
-	Sources []Source              `yaml:"sources"`
+	Server  ServerConfig          `toml:"server"`
+	Storage StorageConfig         `toml:"storage"`
+	LLM     LLMConfig             `toml:"llm"`
+	Modes   map[string]ModeConfig `toml:"modes"`
+	Sources []Source              `toml:"sources"`
 }
 
 type ServerConfig struct {
-	Addr string `yaml:"addr"`
+	Addr string `toml:"addr"`
 }
 
 type StorageConfig struct {
-	Path string `yaml:"path"`
+	Path string `toml:"path"`
 }
 
 type LLMConfig struct {
-	Provider  string `yaml:"provider"`
-	Model     string `yaml:"model"`
-	APIKey    string `yaml:"api_key"`
-	APIKeyEnv string `yaml:"api_key_env"`
-	BaseURL   string `yaml:"base_url"`
-	Timeout   string `yaml:"timeout"`
+	Provider  string `toml:"provider"`
+	Model     string `toml:"model"`
+	APIKey    string `toml:"api_key"`
+	APIKeyEnv string `toml:"api_key_env"`
+	BaseURL   string `toml:"base_url"`
+	Timeout   string `toml:"timeout"`
 }
 
 type Source struct {
-	ID              string         `yaml:"id"`
-	Name            string         `yaml:"name"`
-	URL             string         `yaml:"url"`
-	RefreshInterval Duration       `yaml:"refresh_interval"`
-	Enabled         *bool          `yaml:"enabled"`
-	MaxItems        int            `yaml:"max_items"`
-	Pipeline        PipelineConfig `yaml:"pipeline"`
+	ID              string         `toml:"id"`
+	Name            string         `toml:"name"`
+	URL             string         `toml:"url"`
+	RefreshInterval Duration       `toml:"refresh_interval"`
+	Enabled         *bool          `toml:"enabled"`
+	MaxItems        int            `toml:"max_items"`
+	Pipeline        PipelineConfig `toml:"pipeline"`
 }
 
 type PipelineConfig struct {
-	Mode               string   `yaml:"mode"`
-	SystemPrompt       string   `yaml:"system_prompt"`
-	TaskPrompt         string   `yaml:"task_prompt"`
-	MaxInputChars      int      `yaml:"max_input_chars"`
-	ExtractFullContent bool     `yaml:"extract_full_content"`
-	Temperature        *float64 `yaml:"temperature"`
-	MaxOutputTokens    int      `yaml:"max_output_tokens"`
+	Mode               string   `toml:"mode"`
+	SystemPrompt       string   `toml:"system_prompt"`
+	TaskPrompt         string   `toml:"task_prompt"`
+	MaxInputChars      int      `toml:"max_input_chars"`
+	ExtractFullContent bool     `toml:"extract_full_content"`
+	Temperature        *float64 `toml:"temperature"`
+	MaxOutputTokens    int      `toml:"max_output_tokens"`
 }
 
 type ModeConfig struct {
-	SystemPrompt    string             `yaml:"system_prompt"`
-	TaskPrompt      string             `yaml:"task_prompt"`
-	Temperature     *float64           `yaml:"temperature"`
-	MaxOutputTokens int                `yaml:"max_output_tokens"`
-	OutputSchema    OutputSchemaConfig `yaml:"output_schema"`
+	SystemPrompt    string             `toml:"system_prompt"`
+	TaskPrompt      string             `toml:"task_prompt"`
+	Temperature     *float64           `toml:"temperature"`
+	MaxOutputTokens int                `toml:"max_output_tokens"`
+	OutputSchema    OutputSchemaConfig `toml:"output_schema"`
 }
 
 type OutputSchemaConfig struct {
-	Name         string              `yaml:"name"`
-	TitleField   string              `yaml:"title_field"`
-	SummaryField string              `yaml:"summary_field"`
-	ContentField string              `yaml:"content_field"`
-	ExtraFields  []OutputFieldConfig `yaml:"extra_fields"`
+	Name         string              `toml:"name"`
+	TitleField   string              `toml:"title_field"`
+	SummaryField string              `toml:"summary_field"`
+	ContentField string              `toml:"content_field"`
+	ExtraFields  []OutputFieldConfig `toml:"extra_fields"`
 }
 
 type OutputFieldConfig struct {
-	Name        string `yaml:"name"`
-	Type        string `yaml:"type"`
-	Description string `yaml:"description"`
-	Required    *bool  `yaml:"required"`
+	Name        string `toml:"name"`
+	Type        string `toml:"type"`
+	Description string `toml:"description"`
+	Required    *bool  `toml:"required"`
 }
 
 type Duration struct {
 	time.Duration
 }
 
-func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
-	var raw string
-	if err := value.Decode(&raw); err != nil {
-		return err
+func (d *Duration) UnmarshalText(text []byte) error {
+	raw := strings.TrimSpace(string(text))
+	if raw == "" {
+		d.Duration = 0
+		return nil
 	}
 	parsed, err := time.ParseDuration(raw)
 	if err != nil {
@@ -94,13 +97,17 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func Load(path string) (Config, error) {
+	if ext := strings.ToLower(filepath.Ext(path)); ext != ".toml" {
+		return Config{}, fmt.Errorf("unsupported config format %q: only .toml is supported", ext)
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, err
 	}
 
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, err
 	}
 

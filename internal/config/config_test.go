@@ -8,19 +8,21 @@ import (
 
 func TestLoadAppliesModeSchemaDefaults(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
+	path := filepath.Join(dir, "config.toml")
 	data := []byte(`
-llm:
-  provider: "openai"
-  api_key: "test"
-modes:
-  summary:
-    system_prompt: "x"
-sources:
-  - id: "demo"
-    url: "https://example.com/rss"
-    pipeline:
-      mode: "summary"
+[llm]
+provider = "openai"
+api_key = "test"
+
+[modes.summary]
+system_prompt = "x"
+
+[[sources]]
+id = "demo"
+url = "https://example.com/rss"
+
+[sources.pipeline]
+mode = "summary"
 `)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)

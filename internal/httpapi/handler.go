@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/batkiz/rss-gateway/internal/model"
 	"github.com/batkiz/rss-gateway/internal/pipeline"
@@ -26,16 +28,24 @@ func New(service *pipeline.Service) *Handler {
 }
 
 func (h *Handler) Router() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", h.handleHealth)
-	mux.HandleFunc("/admin", h.handleAdminPage)
-	mux.HandleFunc("/admin/status", h.handleStatus)
-	mux.HandleFunc("/admin/refresh", h.handleRefresh)
-	mux.HandleFunc("/admin/reprocess", h.handleReprocess)
-	mux.HandleFunc("/admin/raw-items", h.handleRawItems)
-	mux.HandleFunc("/feeds/", h.handleFeed)
-	mux.HandleFunc("/sources", h.handleSources)
-	return requestLogger(mux)
+	r := chi.NewRouter()
+	r.Use(chimiddleware.RequestID)
+	r.Use(chimiddleware.RealIP)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.StripSlashes)
+	r.Use(chimiddleware.Timeout(6 * time.Minute))
+	r.Use(requestLogger)
+
+	r.Get("/healthz", h.handleHealth)
+	r.Get("/admin", h.handleAdminPage)
+	r.Post("/admin", h.handleAdminPage)
+	r.Get("/admin/status", h.handleStatus)
+	r.Post("/admin/refresh", h.handleRefresh)
+	r.Post("/admin/reprocess", h.handleReprocess)
+	r.Get("/admin/raw-items", h.handleRawItems)
+	r.Get("/sources", h.handleSources)
+	r.Get("/feeds/{sourceID}.rss", h.handleFeed)
+	return r
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -73,12 +83,13 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleAdminAction(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.redirectAdmin(w, r, r.FormValue("source"), "", "invalid form data")
+		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("lang"), "", "invalid form data")
 		return
 	}
 
 	action := r.FormValue("action")
 	sourceID := r.FormValue("source")
+	lang := r.FormValue("lang")
 	limit := positiveInt(r.FormValue("limit"), 10)
 	log.Printf("admin action=%s source=%s limit=%d", action, sourceID, limit)
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
@@ -103,15 +114,15 @@ func (h *Handler) handleAdminAction(w http.ResponseWriter, r *http.Request) {
 			message = "reprocessed source " + sourceID
 		}
 	default:
-		h.redirectAdmin(w, r, sourceID, "", "unknown admin action")
+		h.redirectAdmin(w, r, sourceID, lang, "", "unknown admin action")
 		return
 	}
 
 	if err != nil {
-		h.redirectAdmin(w, r, sourceID, "", err.Error())
+		h.redirectAdmin(w, r, sourceID, lang, "", err.Error())
 		return
 	}
-	h.redirectAdmin(w, r, sourceID, message, "")
+	h.redirectAdmin(w, r, sourceID, lang, message, "")
 }
 
 func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
@@ -188,13 +199,7 @@ func (h *Handler) handleRawItems(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleFeed(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	sourceID := strings.TrimPrefix(r.URL.Path, "/feeds/")
-	sourceID = strings.TrimSuffix(sourceID, ".rss")
+	sourceID := chi.URLParam(r, "sourceID")
 	if sourceID == "" {
 		http.NotFound(w, r)
 		return
@@ -283,10 +288,13 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, r *http.Request, messag
 	templ.Handler(ui.AdminPage(vm)).ServeHTTP(w, r)
 }
 
-func (h *Handler) redirectAdmin(w http.ResponseWriter, r *http.Request, sourceID, message, errText string) {
+func (h *Handler) redirectAdmin(w http.ResponseWriter, r *http.Request, sourceID, lang, message, errText string) {
 	values := r.URL.Query()
 	if sourceID != "" {
 		values.Set("source", sourceID)
+	}
+	if lang != "" {
+		values.Set("lang", lang)
 	}
 	if message != "" {
 		values.Set("message", message)
@@ -312,6 +320,7 @@ func requestLogger(next http.Handler) http.Handler {
 		start := time.Now()
 		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
-		log.Printf("http method=%s path=%s status=%d remote=%s duration=%s", r.Method, r.URL.RequestURI(), recorder.status, r.RemoteAddr, time.Since(start).Round(time.Millisecond))
+		requestID := chimiddleware.GetReqID(r.Context())
+		log.Printf("http method=%s path=%s status=%d remote=%s request_id=%s duration=%s", r.Method, r.URL.RequestURI(), recorder.status, r.RemoteAddr, requestID, time.Since(start).Round(time.Millisecond))
 	})
 }

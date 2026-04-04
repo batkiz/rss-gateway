@@ -61,10 +61,18 @@ func (a *App) Start(ctx context.Context) error {
 	log.Printf("starting background scheduler")
 	go a.runScheduler(runCtx)
 
-	refreshCtx, refreshCancel := context.WithTimeout(runCtx, 3*time.Minute)
-	defer refreshCancel()
-	log.Printf("running initial refresh for enabled sources")
-	return a.service.RefreshAll(refreshCtx)
+	log.Printf("queueing initial refresh for enabled sources")
+	go func() {
+		refreshCtx, refreshCancel := context.WithTimeout(runCtx, 3*time.Minute)
+		defer refreshCancel()
+		log.Printf("initial refresh started")
+		if err := a.service.RefreshAll(refreshCtx); err != nil {
+			log.Printf("initial refresh failed: %v", err)
+			return
+		}
+		log.Printf("initial refresh complete")
+	}()
+	return nil
 }
 
 func (a *App) Router() http.Handler {
