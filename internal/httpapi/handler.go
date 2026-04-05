@@ -27,7 +27,7 @@ func New(service *pipeline.Service) *Handler {
 	return &Handler{service: service}
 }
 
-func (h *Handler) Router() http.Handler {
+func (h *Handler) Router() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
@@ -38,7 +38,7 @@ func (h *Handler) Router() http.Handler {
 
 	r.Get("/healthz", h.handleHealth)
 	r.Get("/admin", h.handleAdminPage)
-	r.Post("/admin", h.handleAdminPage)
+	r.Post("/admin", h.handleAdminAction)
 	r.Get("/admin/status", h.handleStatus)
 	r.Post("/admin/refresh", h.handleRefresh)
 	r.Post("/admin/reprocess", h.handleReprocess)
@@ -57,14 +57,7 @@ func (h *Handler) handleSources(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Handler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		h.renderAdminPage(w, r, r.URL.Query().Get("message"), r.URL.Query().Get("error"))
-	case http.MethodPost:
-		h.handleAdminAction(w, r)
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
+	h.renderAdminPage(w, r, r.URL.Query().Get("message"), r.URL.Query().Get("error"))
 }
 
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {

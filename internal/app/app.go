@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/batkiz/rss-gateway/internal/config"
 	"github.com/batkiz/rss-gateway/internal/fetcher"
@@ -75,7 +76,7 @@ func (a *App) Start(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) Router() http.Handler {
+func (a *App) Router() chi.Router {
 	return a.handler.Router()
 }
 
