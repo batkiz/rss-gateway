@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -39,6 +40,8 @@ func (h *Handler) Router() *chi.Mux {
 	r.Get("/healthz", h.handleHealth)
 	r.Get("/", h.handleDashboardPage)
 	r.Post("/", h.handleAdminAction)
+	r.Get("/items", h.handleItemPage)
+	r.Post("/items", h.handleItemAction)
 	r.Get("/settings/llm", h.handleLLMPage)
 	r.Post("/api/settings/llm", h.handleSaveLLMSettings)
 	r.Get("/modes", h.handleModesPage)
@@ -81,6 +84,10 @@ func (h *Handler) handleModesPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleSourcesPage(w http.ResponseWriter, r *http.Request) {
 	h.renderAdminPage(w, r, ui.AdminSectionSources, r.URL.Query().Get("message"), r.URL.Query().Get("error"))
+}
+
+func (h *Handler) handleItemPage(w http.ResponseWriter, r *http.Request) {
+	h.renderItemPage(w, r, nil, r.URL.Query().Get("message"), r.URL.Query().Get("error"))
 }
 
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -253,6 +260,50 @@ func (h *Handler) handleSaveSource(w http.ResponseWriter, r *http.Request) {
 	h.redirectAdmin(w, r, "/sources", source.ID, r.FormValue("mode"), r.FormValue("lang"), "saved source "+source.ID, "")
 }
 
+func (h *Handler) handleItemAction(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.renderItemPage(w, r, nil, "", "invalid form data")
+		return
+	}
+	sourceID := strings.TrimSpace(r.FormValue("source"))
+	guid := strings.TrimSpace(r.FormValue("guid"))
+	if sourceID == "" || guid == "" {
+		h.renderItemPage(w, r, nil, "", "source and guid are required")
+		return
+	}
+	overrides, err := readProcessOverrides(r)
+	if err != nil {
+		h.renderItemPage(w, r, nil, "", err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
+	defer cancel()
+
+	var preview *model.ItemProcessPreview
+	var message string
+	switch r.FormValue("action") {
+	case "preview":
+		result, err := h.service.PreviewItem(ctx, sourceID, guid, overrides)
+		if err != nil {
+			h.renderItemPage(w, r, nil, "", err.Error())
+			return
+		}
+		preview = &result
+	case "reprocess":
+		result, err := h.service.ReprocessItem(ctx, sourceID, guid, overrides)
+		if err != nil {
+			h.renderItemPage(w, r, nil, "", err.Error())
+			return
+		}
+		preview = &result
+		message = "reprocessed item " + guid
+	default:
+		h.renderItemPage(w, r, nil, "", "unknown item action")
+		return
+	}
+	h.renderItemPage(w, r, preview, message, "")
+}
+
 func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	sourceID := r.URL.Query().Get("source")
 	log.Printf("api refresh requested source=%s", sourceID)
@@ -394,6 +445,39 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, r *http.Request, sectio
 	templ.Handler(ui.AdminPage(vm)).ServeHTTP(w, r)
 }
 
+func (h *Handler) renderItemPage(w http.ResponseWriter, r *http.Request, preview *model.ItemProcessPreview, message, errText string) {
+	sourceID := strings.TrimSpace(firstNonEmptyValue(r.FormValue("source"), r.URL.Query().Get("source")))
+	guid := strings.TrimSpace(firstNonEmptyValue(r.FormValue("guid"), r.URL.Query().Get("guid")))
+	if sourceID == "" || guid == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "source and guid query parameters are required"})
+		return
+	}
+
+	ctx := r.Context()
+	source, err := h.service.GetSource(ctx, sourceID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	rawItem, err := h.service.GetRawItem(ctx, sourceID, guid)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	processed, err := h.service.GetProcessedItem(ctx, sourceID, guid)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	modes, err := h.service.ListModes(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	vm := ui.BuildItemPageView(r, source, rawItem, processed, preview, modes, message, errText)
+	templ.Handler(ui.ItemPage(vm)).ServeHTTP(w, r)
+}
+
 func (h *Handler) redirectAdmin(w http.ResponseWriter, r *http.Request, path, sourceID, modeName, lang, message, errText string) {
 	values := r.URL.Query()
 	if sourceID != "" {
@@ -469,6 +553,30 @@ func parseExtraFieldsJSON(value string) ([]model.OutputField, error) {
 		return nil, err
 	}
 	return fields, nil
+}
+
+func readProcessOverrides(r *http.Request) (model.ProcessOverrides, error) {
+	temperature, err := parseOptionalFloat(r.FormValue("temperature"))
+	if err != nil {
+		return model.ProcessOverrides{}, fmt.Errorf("invalid temperature: %w", err)
+	}
+	return model.ProcessOverrides{
+		Mode:            strings.TrimSpace(r.FormValue("mode")),
+		SystemPrompt:    r.FormValue("system_prompt"),
+		TaskPrompt:      r.FormValue("task_prompt"),
+		MaxInputChars:   positiveInt(r.FormValue("max_input_chars"), 0),
+		Temperature:     temperature,
+		MaxOutputTokens: positiveInt(r.FormValue("max_output_tokens"), 0),
+	}, nil
+}
+
+func firstNonEmptyValue(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 type statusRecorder struct {

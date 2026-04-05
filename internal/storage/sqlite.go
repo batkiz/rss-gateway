@@ -391,6 +391,26 @@ func (s *SQLiteStore) ListRawItems(ctx context.Context, sourceID string, limit i
 	return items, rows.Err()
 }
 
+func (s *SQLiteStore) GetRawItem(ctx context.Context, sourceID, guid string) (model.RawItem, error) {
+	var item model.RawItem
+	err := s.db.QueryRowContext(ctx, `
+		SELECT source_id, guid, title, link, description, content_html,
+		       content_text, author, published_at, content_hash, fetched_at
+		FROM raw_items
+		WHERE source_id = ? AND guid = ?
+		LIMIT 1
+	`, sourceID, guid).Scan(
+		&item.SourceID, &item.GUID, &item.Title, &item.Link, &item.Description,
+		&item.ContentHTML, &item.ContentText, &item.Author, &item.PublishedAt,
+		&item.Hash, &item.FetchedAt,
+	)
+	if err != nil {
+		return model.RawItem{}, err
+	}
+	item.Content = item.ContentText
+	return item, nil
+}
+
 func (s *SQLiteStore) GetProcessedInputHash(ctx context.Context, sourceID, guid string) (string, bool, error) {
 	var inputHash string
 	err := s.db.QueryRowContext(ctx, `
@@ -454,6 +474,25 @@ func (s *SQLiteStore) ListProcessedItems(ctx context.Context, sourceID string, l
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *SQLiteStore) GetProcessedItem(ctx context.Context, sourceID, guid string) (model.ProcessedItem, error) {
+	var item model.ProcessedItem
+	err := s.db.QueryRowContext(ctx, `
+		SELECT source_id, guid, original_title, original_link, published_at,
+		       output_title, output_summary, output_content, output_json, model, input_hash, processed_at
+		FROM processed_items
+		WHERE source_id = ? AND guid = ?
+		LIMIT 1
+	`, sourceID, guid).Scan(
+		&item.SourceID, &item.GUID, &item.OriginalTitle, &item.OriginalLink, &item.PublishedAt,
+		&item.OutputTitle, &item.OutputSummary, &item.OutputContent, &item.OutputJSON, &item.Model,
+		&item.InputHash, &item.ProcessedAt,
+	)
+	if err != nil {
+		return model.ProcessedItem{}, err
+	}
+	return item, nil
 }
 
 func (s *SQLiteStore) UpdateFeedState(ctx context.Context, state model.FeedState) error {

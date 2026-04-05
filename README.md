@@ -35,6 +35,7 @@ go run ./cmd/server -config configs/config.example.toml
 - `http://localhost:8080/healthz`
 - `http://localhost:8080/`
 - `http://localhost:8080/sources`
+- `http://localhost:8080/items?source=hackernews-summary&guid=<guid>`
 - `http://localhost:8080/api/sources`
 - `http://localhost:8080/api/status`
 - `http://localhost:8080/feeds/hackernews-summary.rss`
@@ -108,6 +109,7 @@ source 级别的 `pipeline.system_prompt`、`pipeline.task_prompt` 可以覆盖 
 - `GET /settings/llm`：LLM 设置页面
 - `GET /modes`：mode 管理页面
 - `GET /sources`：source 管理页面
+- `GET /items?source=<id>&guid=<guid>`：单条 item 页面，可查看完整内容、预览 prompt、单条重跑
 - `POST /api/settings/llm`：保存运行时 LLM 配置
 - `POST /api/settings/mode`：保存 mode
 - `POST /api/settings/source`：保存 source
@@ -144,5 +146,7 @@ ghcr.io/batkiz/rss-gateway
 
 - OpenAI provider 当前使用 `/chat/completions`，并通过 `response_format` 应用 JSON Schema。
 - 原始条目会先落库，再根据输入内容变化决定是否重新处理。
+- 单条 item 页面支持临时覆盖 mode / prompt / temperature / token 参数做预览，确认后可只重跑并保存这一条。
+- 链接页正文提取现在会做更激进的清洗、候选区域评分和回退，优先选择更像正文的区块。
 - HTTP 服务会优先启动，首次 refresh 在后台异步执行。
 - 如果 source 引用了未定义的 mode，且又没有提供内联 prompt 覆盖，启动会失败。

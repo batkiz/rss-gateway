@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -28,9 +29,11 @@ type Store interface {
 	UpsertSource(ctx context.Context, source model.Source) error
 	UpsertRawItem(ctx context.Context, item model.RawItem) error
 	ListRawItems(ctx context.Context, sourceID string, limit int) ([]model.RawItem, error)
+	GetRawItem(ctx context.Context, sourceID, guid string) (model.RawItem, error)
 	GetProcessedInputHash(ctx context.Context, sourceID, guid string) (string, bool, error)
 	UpsertProcessedItem(ctx context.Context, item model.ProcessedItem) error
 	ListProcessedItems(ctx context.Context, sourceID string, limit int) ([]model.ProcessedItem, error)
+	GetProcessedItem(ctx context.Context, sourceID, guid string) (model.ProcessedItem, error)
 	UpdateFeedState(ctx context.Context, state model.FeedState) error
 	GetFeedState(ctx context.Context, sourceID string) (model.FeedState, error)
 	ListFeedStates(ctx context.Context) ([]model.FeedState, error)
@@ -286,6 +289,21 @@ func (s *Service) ListRawItems(ctx context.Context, sourceID string, limit int) 
 	return s.store.ListRawItems(ctx, sourceID, limit)
 }
 
+func (s *Service) GetRawItem(ctx context.Context, sourceID, guid string) (model.RawItem, error) {
+	return s.store.GetRawItem(ctx, sourceID, guid)
+}
+
+func (s *Service) GetProcessedItem(ctx context.Context, sourceID, guid string) (*model.ProcessedItem, error) {
+	item, err := s.store.GetProcessedItem(ctx, sourceID, guid)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (s *Service) FeedState(ctx context.Context, sourceID string) (model.FeedState, error) {
 	return s.store.GetFeedState(ctx, sourceID)
 }
@@ -330,50 +348,132 @@ func (s *Service) processRawItem(ctx context.Context, source model.Source, item 
 	if exists && inputHash == item.Hash && !force {
 		return false, nil
 	}
+	_, _, err = s.processRawItemWithOverrides(ctx, source, item, model.ProcessOverrides{}, force, true)
+	return err == nil, err
+}
 
-	modeCfg, err := s.modeConfig(ctx, source.PipelineMode)
+func (s *Service) PreviewItem(ctx context.Context, sourceID, guid string, overrides model.ProcessOverrides) (model.ItemProcessPreview, error) {
+	source, err := s.store.GetSource(ctx, sourceID)
 	if err != nil {
-		return false, err
+		return model.ItemProcessPreview{}, err
+	}
+	return s.previewItemWithOverrides(ctx, source, guid, overrides, false)
+}
+
+func (s *Service) ReprocessItem(ctx context.Context, sourceID, guid string, overrides model.ProcessOverrides) (model.ItemProcessPreview, error) {
+	source, err := s.store.GetSource(ctx, sourceID)
+	if err != nil {
+		return model.ItemProcessPreview{}, err
+	}
+	return s.previewItemWithOverrides(ctx, source, guid, overrides, true)
+}
+
+func (s *Service) previewItemWithOverrides(ctx context.Context, source model.Source, guid string, overrides model.ProcessOverrides, save bool) (model.ItemProcessPreview, error) {
+	rawItem, err := s.store.GetRawItem(ctx, source.ID, guid)
+	if err != nil {
+		return model.ItemProcessPreview{}, err
+	}
+	request, response, err := s.processRawItemWithOverrides(ctx, source, rawItem, overrides, true, save)
+	if err != nil {
+		return model.ItemProcessPreview{}, err
+	}
+	var processed *model.ProcessedItem
+	processedItem, err := s.store.GetProcessedItem(ctx, source.ID, guid)
+	if err == nil {
+		processed = &processedItem
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return model.ItemProcessPreview{}, err
+	}
+	return model.ItemProcessPreview{
+		Source:    source,
+		RawItem:   rawItem,
+		Request:   request,
+		Response:  response,
+		Processed: processed,
+	}, nil
+}
+
+func (s *Service) processRawItemWithOverrides(ctx context.Context, source model.Source, item model.RawItem, overrides model.ProcessOverrides, force, save bool) (model.ProcessRequest, model.ProcessResponse, error) {
+	inputHash, exists, err := s.store.GetProcessedInputHash(ctx, source.ID, item.GUID)
+	if err != nil {
+		return model.ProcessRequest{}, model.ProcessResponse{}, err
+	}
+	if exists && inputHash == item.Hash && !force {
+		existing, err := s.store.GetProcessedItem(ctx, source.ID, item.GUID)
+		if err != nil {
+			return model.ProcessRequest{}, model.ProcessResponse{}, err
+		}
+		request, err := s.buildProcessRequest(ctx, source, item, overrides)
+		if err != nil {
+			return model.ProcessRequest{}, model.ProcessResponse{}, err
+		}
+		return request, model.ProcessResponse{
+			Title:      existing.OutputTitle,
+			Summary:    existing.OutputSummary,
+			Content:    existing.OutputContent,
+			Model:      existing.Model,
+			OutputJSON: existing.OutputJSON,
+		}, nil
+	}
+
+	request, err := s.buildProcessRequest(ctx, source, item, overrides)
+	if err != nil {
+		return model.ProcessRequest{}, model.ProcessResponse{}, err
 	}
 	processor, err := s.processorFor(ctx)
 	if err != nil {
-		return false, err
+		return model.ProcessRequest{}, model.ProcessResponse{}, err
 	}
-	resp, err := processor.Process(ctx, model.ProcessRequest{
-		Mode:            source.PipelineMode,
+	resp, err := processor.Process(ctx, request)
+	if err != nil {
+		log.Printf("process %s/%s: %v", source.ID, item.GUID, err)
+		return request, model.ProcessResponse{}, err
+	}
+
+	if save {
+		err = s.store.UpsertProcessedItem(ctx, model.ProcessedItem{
+			SourceID:      source.ID,
+			GUID:          item.GUID,
+			OriginalTitle: item.Title,
+			OriginalLink:  item.Link,
+			PublishedAt:   item.PublishedAt,
+			OutputTitle:   fallbackTitle(resp.Title, item.Title),
+			OutputSummary: resp.Summary,
+			OutputContent: resp.Content,
+			OutputJSON:    resp.OutputJSON,
+			Model:         resp.Model,
+			InputHash:     item.Hash,
+			ProcessedAt:   time.Now().UTC(),
+		})
+		if err != nil {
+			return request, model.ProcessResponse{}, err
+		}
+	}
+	return request, resp, nil
+}
+
+func (s *Service) buildProcessRequest(ctx context.Context, source model.Source, item model.RawItem, overrides model.ProcessOverrides) (model.ProcessRequest, error) {
+	modeName := firstNonEmpty(overrides.Mode, source.PipelineMode)
+	modeCfg, err := s.modeConfig(ctx, modeName)
+	if err != nil {
+		return model.ProcessRequest{}, err
+	}
+	request := model.ProcessRequest{
+		Mode:            modeName,
 		Title:           fallbackTitle(item.Title, item.Link),
 		Link:            item.Link,
 		Content:         item.Content,
-		SystemPrompt:    firstNonEmpty(source.SystemPrompt, modeCfg.SystemPrompt),
-		TaskPrompt:      firstNonEmpty(source.TaskPrompt, modeCfg.TaskPrompt),
-		MaxInputChars:   source.MaxInputChars,
-		Temperature:     firstNonNilFloat(source.Temperature, modeCfg.Temperature),
-		MaxOutputTokens: firstNonZero(source.MaxOutputTokens, modeCfg.MaxOutputTokens),
+		SystemPrompt:    firstNonEmpty(overrides.SystemPrompt, source.SystemPrompt, modeCfg.SystemPrompt),
+		TaskPrompt:      firstNonEmpty(overrides.TaskPrompt, source.TaskPrompt, modeCfg.TaskPrompt),
+		MaxInputChars:   firstNonZero(overrides.MaxInputChars, source.MaxInputChars),
+		Temperature:     firstNonNilFloat(overrides.Temperature, source.Temperature, modeCfg.Temperature),
+		MaxOutputTokens: firstNonZero(overrides.MaxOutputTokens, source.MaxOutputTokens, modeCfg.MaxOutputTokens),
 		OutputSchema:    modeCfg.OutputSchema,
-	})
-	if err != nil {
-		log.Printf("process %s/%s: %v", source.ID, item.GUID, err)
-		return false, nil
 	}
-
-	err = s.store.UpsertProcessedItem(ctx, model.ProcessedItem{
-		SourceID:      source.ID,
-		GUID:          item.GUID,
-		OriginalTitle: item.Title,
-		OriginalLink:  item.Link,
-		PublishedAt:   item.PublishedAt,
-		OutputTitle:   fallbackTitle(resp.Title, item.Title),
-		OutputSummary: resp.Summary,
-		OutputContent: resp.Content,
-		OutputJSON:    resp.OutputJSON,
-		Model:         resp.Model,
-		InputHash:     item.Hash,
-		ProcessedAt:   time.Now().UTC(),
-	})
-	if err != nil {
-		return false, err
+	if request.MaxInputChars <= 0 {
+		request.MaxInputChars = 8000
 	}
-	return true, nil
+	return request, nil
 }
 
 func fallbackTitle(primary, secondary string) string {

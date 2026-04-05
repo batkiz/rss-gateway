@@ -35,6 +35,7 @@ go run ./cmd/server -config configs/config.example.toml
 - `http://localhost:8080/healthz`
 - `http://localhost:8080/`
 - `http://localhost:8080/sources`
+- `http://localhost:8080/items?source=hackernews-summary&guid=<guid>`
 - `http://localhost:8080/api/sources`
 - `http://localhost:8080/api/status`
 - `http://localhost:8080/feeds/hackernews-summary.rss`
@@ -108,6 +109,7 @@ Source-level `pipeline.system_prompt` and `pipeline.task_prompt` can override mo
 - `GET /settings/llm`: LLM settings page
 - `GET /modes`: mode management page
 - `GET /sources`: source management page
+- `GET /items?source=<id>&guid=<guid>`: single-item page for full content inspection, prompt preview, and one-off reprocessing
 - `POST /api/settings/llm`: save runtime LLM settings
 - `POST /api/settings/mode`: save a mode
 - `POST /api/settings/source`: save a source
@@ -144,5 +146,7 @@ ghcr.io/batkiz/rss-gateway
 
 - The OpenAI provider currently uses `/chat/completions` with structured `response_format`.
 - Raw items are persisted first, then reprocessed only when input content changes or reprocessing is requested.
+- The single-item page lets you temporarily override mode, prompts, temperature, and token limits for preview, then save a reprocess for just that item.
+- Linked article extraction now applies more aggressive cleaning, candidate scoring, and fallback selection to pick content that looks more like the main article body.
 - The HTTP server starts first, and the initial refresh runs asynchronously in the background.
 - Startup fails if a source references an undefined mode without inline prompt overrides.

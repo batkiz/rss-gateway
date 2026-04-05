@@ -282,7 +282,7 @@ templ dashboardSection(vm AdminPageView) {
 						for _, item := range vm.RawItems {
 							<div class="rounded-xl border border-border/80 bg-background/60 p-4">
 								<div class="flex items-start justify-between gap-3">
-									<div class="font-medium">{ fallback(item.Title, item.GUID) }</div>
+									<a href={ itemLink(item.SourceID, item.GUID, vm.Lang) } class="font-medium underline-offset-4 hover:underline">{ fallback(item.Title, item.GUID) }</a>
 									@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) {
 										{ item.PublishedAt.Format("01-02 15:04") }
 									}
@@ -311,7 +311,7 @@ templ dashboardSection(vm AdminPageView) {
 						for _, item := range vm.ProcessedItems {
 							<div class="rounded-xl border border-border/80 bg-background/60 p-4">
 								<div class="flex items-start justify-between gap-3">
-									<div class="font-medium">{ fallback(item.OutputTitle, item.OriginalTitle) }</div>
+									<a href={ itemLink(item.SourceID, item.GUID, vm.Lang) } class="font-medium underline-offset-4 hover:underline">{ fallback(item.OutputTitle, item.OriginalTitle) }</a>
 									@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
 										{ item.ProcessedAt.Format("01-02 15:04") }
 									}

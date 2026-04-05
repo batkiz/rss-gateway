@@ -1,0 +1,176 @@
+package ui
+
+import (
+	"encoding/json"
+
+	"github.com/batkiz/rss-gateway/internal/model"
+	"github.com/templui/templui/components/badge"
+	"github.com/templui/templui/components/card"
+)
+
+templ ItemPage(vm ItemPageView) {
+	<!doctype html>
+	<html lang={ vm.Lang }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ vm.Text.Title }</title>
+			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+			<style type="text/tailwindcss">
+				body {
+					font-family: "Iosevka Etoile", "IBM Plex Sans", "Segoe UI", sans-serif;
+					background:
+						radial-gradient(circle at top left, rgba(34, 160, 214, 0.16), transparent 28%),
+						radial-gradient(circle at bottom right, rgba(166, 196, 106, 0.18), transparent 24%),
+						linear-gradient(180deg, rgba(255,255,255,0.92), rgba(248,250,245,0.98));
+				}
+				input, select, textarea {
+					@apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm;
+				}
+			</style>
+		</head>
+		<body class="min-h-screen text-slate-900">
+			<div class="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+				<div class="flex flex-wrap items-center justify-between gap-3">
+					<div class="flex flex-wrap gap-2">
+						for _, item := range vm.NavItems {
+							<a href={ item.Href } class={ navLinkClass(item.Active) }>{ item.Label }</a>
+						}
+					</div>
+					<a href={ adminURL("/", vm.SourceID, "", vm.Lang) } class="text-sm text-sky-700 underline-offset-4 hover:underline">{ vm.Text.BackToDashboard }</a>
+				</div>
+				if vm.Message != "" {
+					<div class="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm">{ vm.Message }</div>
+				}
+				if vm.Error != "" {
+					<div class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm">{ vm.Error }</div>
+				}
+
+				@card.Card(card.Props{Class: "bg-white"}) {
+					@card.Header() {
+						@card.Title() { <div class="text-2xl font-semibold">{ fallback(vm.Raw.Title, vm.GUID) }</div> }
+						@card.Description() {
+							<div class="flex flex-wrap gap-3 text-sm text-slate-600">
+								<span>{ vm.Text.Source }: { vm.SourceID }</span>
+								<span>{ vm.Text.GUID }: { vm.GUID }</span>
+								<span>{ vm.Text.PublishedAt }: { itemMetaTime(vm.Raw.PublishedAt) }</span>
+							</div>
+						}
+					}
+				}
+
+				<div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+					<div class="grid gap-6">
+						@card.Card(card.Props{Class: "bg-white"}) {
+							@card.Header() { @card.Title() { <div class="text-xl font-semibold">{ vm.Text.RawContent }</div> } }
+							@card.Content(card.ContentProps{Class: "grid gap-4"}) {
+								if vm.Raw.Link != "" {
+									<a href={ vm.Raw.Link } class="text-sm text-sky-700 underline-offset-4 hover:underline">{ vm.Raw.Link }</a>
+								}
+								<pre class="overflow-x-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6">{ vm.Raw.ContentText }</pre>
+							}
+						}
+
+						@card.Card(card.Props{Class: "bg-white"}) {
+							@card.Header() { @card.Title() { <div class="text-xl font-semibold">{ vm.Text.RawHTML }</div> } }
+							@card.Content(card.ContentProps{Class: "grid gap-4"}) {
+								<pre class="overflow-x-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5">{ vm.Raw.ContentHTML }</pre>
+							}
+						}
+					</div>
+
+					<div class="grid gap-6">
+						@card.Card(card.Props{Class: "bg-white"}) {
+							@card.Header() { @card.Title() { <div class="text-xl font-semibold">{ vm.Text.ProcessedOutput }</div> } }
+							@card.Content(card.ContentProps{Class: "grid gap-4"}) {
+								if vm.Processed == nil {
+									<div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">{ vm.Text.NoProcessed }</div>
+								} else {
+									<div class="flex flex-wrap gap-2">
+										@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) { vm.Text.Model + ": " + vm.Processed.Model }
+										@badge.Badge(badge.Props{Variant: badge.VariantOutline}) { itemMetaTime(vm.Processed.ProcessedAt) }
+									</div>
+									<div class="font-medium">{ vm.Processed.OutputTitle }</div>
+									<div class="text-sm leading-6 text-slate-700">{ vm.Processed.OutputSummary }</div>
+									<pre class="overflow-x-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6">{ vm.Processed.OutputContent }</pre>
+								}
+							}
+						}
+
+						@card.Card(card.Props{Class: "bg-white"}) {
+							@card.Header() { @card.Title() { <div class="text-xl font-semibold">{ vm.Text.PromptLab }</div> } }
+							@card.Content(card.ContentProps{Class: "grid gap-3"}) {
+								<form method="post" action="/items" class="grid gap-3">
+									<input type="hidden" name="lang" value={ vm.Lang }/>
+									<input type="hidden" name="source" value={ vm.SourceID }/>
+									<input type="hidden" name="guid" value={ vm.GUID }/>
+									<div class="grid gap-2">
+										<label for="mode">Mode</label>
+										<input id="mode" name="mode" value={ vm.Form.Mode }/>
+									</div>
+									<div class="grid gap-2">
+										<label for="system_prompt">{ vm.Text.SystemPrompt }</label>
+										<textarea id="system_prompt" name="system_prompt" rows="5">{ vm.Form.SystemPrompt }</textarea>
+									</div>
+									<div class="grid gap-2">
+										<label for="task_prompt">{ vm.Text.TaskPrompt }</label>
+										<textarea id="task_prompt" name="task_prompt" rows="6">{ vm.Form.TaskPrompt }</textarea>
+									</div>
+									<div class="grid gap-3 md:grid-cols-3">
+										<div class="grid gap-2">
+											<label for="temperature">{ vm.Text.Temperature }</label>
+											<input id="temperature" name="temperature" value={ vm.Form.Temperature }/>
+										</div>
+										<div class="grid gap-2">
+											<label for="max_output_tokens">{ vm.Text.MaxOutputTokens }</label>
+											<input id="max_output_tokens" name="max_output_tokens" type="number" min="0" value={ intValue(vm.Form.MaxOutputTokens) }/>
+										</div>
+										<div class="grid gap-2">
+											<label for="max_input_chars">{ vm.Text.MaxInputChars }</label>
+											<input id="max_input_chars" name="max_input_chars" type="number" min="1" value={ intValue(vm.Form.MaxInputChars) }/>
+										</div>
+									</div>
+									<div class="flex flex-wrap gap-3">
+										<button class="rounded-md bg-sky-700 px-4 py-2 text-sm text-white" type="submit" name="action" value="preview">{ vm.Text.Preview }</button>
+										<button class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm" type="submit" name="action" value="reprocess">{ vm.Text.ReprocessAndSave }</button>
+									</div>
+								</form>
+							}
+						}
+
+						if vm.Preview != nil {
+							@card.Card(card.Props{Class: "bg-white"}) {
+								@card.Header() { @card.Title() { <div class="text-xl font-semibold">{ vm.Text.PreviewOutput }</div> } }
+								@card.Content(card.ContentProps{Class: "grid gap-4"}) {
+									<div class="flex flex-wrap gap-2">
+										@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) { vm.Text.Model + ": " + vm.Preview.Response.Model }
+										@badge.Badge(badge.Props{Variant: badge.VariantOutline}) { vm.Text.Mode + ": " + vm.Preview.Request.Mode }
+									</div>
+									<div class="font-medium">{ vm.Preview.Response.Title }</div>
+									<div class="text-sm leading-6 text-slate-700">{ vm.Preview.Response.Summary }</div>
+									<pre class="overflow-x-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6">{ vm.Preview.Response.Content }</pre>
+									<div class="grid gap-2">
+										<div class="text-sm font-medium">{ vm.Text.Request }</div>
+										<pre class="overflow-x-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5">{ marshalPreviewRequest(vm.Preview.Request) }</pre>
+									</div>
+									<div class="grid gap-2">
+										<div class="text-sm font-medium">{ vm.Text.OutputJSON }</div>
+										<pre class="overflow-x-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5">{ vm.Preview.Response.OutputJSON }</pre>
+									</div>
+								}
+							}
+						}
+					</div>
+				</div>
+			</div>
+		</body>
+	</html>
+}
+
+func marshalPreviewRequest(req model.ProcessRequest) string {
+	data, err := json.MarshalIndent(req, "", "  ")
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}

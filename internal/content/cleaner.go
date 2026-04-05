@@ -3,6 +3,7 @@ package content
 import (
 	"bytes"
 	"io"
+	"math"
 	"regexp"
 	"strings"
 
@@ -11,6 +12,13 @@ import (
 )
 
 var whitespaceRE = regexp.MustCompile(`\s+`)
+
+var noiseSelectors = []string{
+	"script", "style", "noscript", "svg", "form", "nav", "header", "footer", "aside", "iframe",
+	".comments", ".comment", ".comment-list", ".share", ".sharing", ".social", ".related",
+	".advert", ".ads", ".promo", ".newsletter", ".sidebar", ".breadcrumbs", ".breadcrumb",
+	"[aria-hidden='true']", "[hidden]", ".sr-only",
+}
 
 func ExtractText(raw string) string {
 	raw = strings.TrimSpace(raw)
@@ -27,9 +35,7 @@ func ExtractText(raw string) string {
 		return normalizeWhitespace(raw)
 	}
 
-	doc.Find("script,style,noscript,svg,form,nav,header,footer,aside,iframe").Each(func(_ int, sel *goquery.Selection) {
-		sel.Remove()
-	})
+	cleanDocument(doc)
 
 	var buf bytes.Buffer
 	renderSelectionText(&buf, doc.Selection)
@@ -42,21 +48,14 @@ func ExtractReadableHTML(body io.Reader) (string, string, error) {
 		return "", "", err
 	}
 
-	candidates := []string{"article", "main", ".post", ".entry-content", ".article-content", "body"}
-	var selection *goquery.Selection
-	for _, candidate := range candidates {
-		selection = doc.Find(candidate).First()
-		if selection.Length() > 0 {
-			break
-		}
+	cleanDocument(doc)
+	selection := selectReadableRoot(doc)
+	if selection == nil || selection.Length() == 0 {
+		selection = doc.Find("body").First()
 	}
 	if selection == nil || selection.Length() == 0 {
 		selection = doc.Selection
 	}
-
-	selection.Find("script,style,noscript,svg,form,nav,header,footer,aside,iframe").Each(func(_ int, sel *goquery.Selection) {
-		sel.Remove()
-	})
 
 	htmlText, err := selection.Html()
 	if err != nil {
@@ -65,7 +64,96 @@ func ExtractReadableHTML(body io.Reader) (string, string, error) {
 
 	var buf bytes.Buffer
 	renderSelectionText(&buf, selection)
-	return strings.TrimSpace(htmlText), normalizeWhitespace(buf.String()), nil
+	text := normalizeWhitespace(buf.String())
+
+	if len(text) < 160 {
+		bodySelection := doc.Find("body").First()
+		if bodySelection.Length() > 0 {
+			var fallback bytes.Buffer
+			renderSelectionText(&fallback, bodySelection)
+			fallbackText := normalizeWhitespace(fallback.String())
+			if len(fallbackText) > len(text) {
+				text = fallbackText
+				if fallbackHTML, err := bodySelection.Html(); err == nil {
+					htmlText = fallbackHTML
+				}
+			}
+		}
+	}
+
+	return strings.TrimSpace(htmlText), text, nil
+}
+
+func cleanDocument(doc *goquery.Document) {
+	for _, selector := range noiseSelectors {
+		doc.Find(selector).Each(func(_ int, sel *goquery.Selection) {
+			sel.Remove()
+		})
+	}
+	doc.Find("[class], [id]").Each(func(_ int, sel *goquery.Selection) {
+		classValue, _ := sel.Attr("class")
+		idValue, _ := sel.Attr("id")
+		combined := strings.ToLower(classValue + " " + idValue)
+		if strings.Contains(combined, "comment") || strings.Contains(combined, "share") || strings.Contains(combined, "footer") || strings.Contains(combined, "sidebar") {
+			sel.Remove()
+		}
+	})
+}
+
+func selectReadableRoot(doc *goquery.Document) *goquery.Selection {
+	candidates := []*goquery.Selection{
+		doc.Find("article").First(),
+		doc.Find("main").First(),
+		doc.Find("[role='main']").First(),
+	}
+
+	doc.Find("section, div").Each(func(i int, sel *goquery.Selection) {
+		if i < 80 {
+			candidates = append(candidates, sel)
+		}
+	})
+
+	bestScore := math.Inf(-1)
+	var best *goquery.Selection
+	seen := map[*html.Node]struct{}{}
+	for _, candidate := range candidates {
+		if candidate == nil || candidate.Length() == 0 || len(candidate.Nodes) == 0 {
+			continue
+		}
+		if _, ok := seen[candidate.Nodes[0]]; ok {
+			continue
+		}
+		seen[candidate.Nodes[0]] = struct{}{}
+		score := readabilityScore(candidate)
+		if score > bestScore {
+			bestScore = score
+			best = candidate
+		}
+	}
+	return best
+}
+
+func readabilityScore(sel *goquery.Selection) float64 {
+	var buf bytes.Buffer
+	renderSelectionText(&buf, sel)
+	text := normalizeWhitespace(buf.String())
+	if len(text) == 0 {
+		return math.Inf(-1)
+	}
+
+	paragraphs := sel.Find("p").Length()
+	links := sel.Find("a").Length()
+	headings := sel.Find("h1, h2, h3").Length()
+	textLen := float64(len(text))
+	linkDensity := float64(links) / math.Max(1, float64(paragraphs+1))
+	score := textLen
+	score += float64(paragraphs) * 120
+	score += float64(headings) * 40
+	score -= linkDensity * 140
+	if textLen < 200 {
+		score -= 250
+	}
+	return score
 }
 
 func renderSelectionText(buf *bytes.Buffer, selection *goquery.Selection) {
@@ -84,7 +172,7 @@ func renderNodeText(buf *bytes.Buffer, node *html.Node) {
 	}
 	if node.Type == html.ElementNode {
 		switch node.Data {
-		case "p", "div", "section", "article", "li", "br", "h1", "h2", "h3", "h4":
+		case "p", "div", "section", "article", "li", "br", "h1", "h2", "h3", "h4", "blockquote", "pre":
 			buf.WriteString("\n")
 		}
 	}

@@ -41,10 +41,7 @@ func (f *Fetcher) Fetch(ctx context.Context, source model.Source) ([]model.RawIt
 		if item == nil {
 			continue
 		}
-		contentHTML := strings.TrimSpace(item.Content)
-		if contentHTML == "" {
-			contentHTML = strings.TrimSpace(item.Description)
-		}
+		contentHTML := mergeFeedContent(item.Content, item.Description)
 		if contentHTML == "" && strings.TrimSpace(item.Link) == "" {
 			continue
 		}
@@ -67,7 +64,7 @@ func (f *Fetcher) Fetch(ctx context.Context, source model.Source) ([]model.RawIt
 		contentText := content.ExtractText(contentHTML)
 		if source.ExtractFull && strings.TrimSpace(item.Link) != "" {
 			articleHTML, articleText, err := f.fetchLinkedArticle(ctx, item.Link)
-			if err == nil && strings.TrimSpace(articleText) != "" {
+			if err == nil && shouldPreferLinkedArticle(contentText, articleText) {
 				contentHTML = articleHTML
 				contentText = articleText
 			}
@@ -126,6 +123,10 @@ func (f *Fetcher) fetchLinkedArticle(ctx context.Context, link string) (string, 
 	if resp.StatusCode >= 300 {
 		return "", "", fmt.Errorf("fetch linked article status %d", resp.StatusCode)
 	}
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if contentType != "" && !strings.Contains(contentType, "text/html") && !strings.Contains(contentType, "application/xhtml+xml") {
+		return "", "", fmt.Errorf("unsupported linked article content-type %q", contentType)
+	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if err != nil {
@@ -133,4 +134,34 @@ func (f *Fetcher) fetchLinkedArticle(ctx context.Context, link string) (string, 
 	}
 
 	return content.ExtractReadableHTML(strings.NewReader(string(body)))
+}
+
+func mergeFeedContent(contentHTML, description string) string {
+	contentHTML = strings.TrimSpace(contentHTML)
+	description = strings.TrimSpace(description)
+	switch {
+	case contentHTML == "":
+		return description
+	case description == "":
+		return contentHTML
+	case content.ExtractText(contentHTML) == content.ExtractText(description):
+		return contentHTML
+	default:
+		return contentHTML + "\n\n" + description
+	}
+}
+
+func shouldPreferLinkedArticle(feedText, articleText string) bool {
+	feedText = strings.TrimSpace(feedText)
+	articleText = strings.TrimSpace(articleText)
+	if articleText == "" {
+		return false
+	}
+	if feedText == "" {
+		return true
+	}
+	if len(feedText) < 500 && len(articleText) > len(feedText)+200 {
+		return true
+	}
+	return len(articleText) > int(float64(len(feedText))*1.35)
 }

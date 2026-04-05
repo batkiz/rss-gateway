@@ -71,6 +71,23 @@ type ProcessResponse struct {
 	OutputJSON string
 }
 
+type ProcessOverrides struct {
+	Mode            string
+	SystemPrompt    string
+	TaskPrompt      string
+	MaxInputChars   int
+	Temperature     *float64
+	MaxOutputTokens int
+}
+
+type ItemProcessPreview struct {
+	Source    Source
+	RawItem   RawItem
+	Request   ProcessRequest
+	Response  ProcessResponse
+	Processed *ProcessedItem
+}
+
 type ProcessedItem struct {
 	SourceID      string
 	GUID          string
