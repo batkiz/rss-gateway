@@ -18,19 +18,13 @@
 
 ## 快速开始
 
-1. 设置 API Key：
+1. 启动服务：
 
 ```powershell
-$env:OPENAI_API_KEY="your-key"
+go run ./cmd/server -config configs/config.toml
 ```
 
-2. 启动服务：
-
-```powershell
-go run ./cmd/server -config configs/config.example.toml
-```
-
-3. 打开这些地址：
+2. 打开这些地址：
 
 - `http://localhost:8080/healthz`
 - `http://localhost:8080/`
@@ -39,6 +33,8 @@ go run ./cmd/server -config configs/config.example.toml
 - `http://localhost:8080/api/sources`
 - `http://localhost:8080/api/status`
 - `http://localhost:8080/feeds/hackernews-summary.rss`
+
+3. 第一次使用时，到 `http://localhost:8080/settings/llm` 填写 LLM provider、model、API key 和 base URL。
 
 4. 手动触发刷新：
 
@@ -61,13 +57,13 @@ Invoke-WebRequest -Method POST "http://localhost:8080/api/reprocess?source=hacke
 这些数据会保存到 SQLite，并在保存后立即生效。  
 TOML 仍然保留，但主要用于首次启动时的初始化 seed；数据库里一旦已有运行时配置，后续启动不会再用 TOML 覆盖它们。
 
-`llm.base_url` 可用于接入 OpenAI 兼容网关：
+`llm.base_url` 可用于接入 OpenAI 兼容网关。`api_key` 可以直接写在 TOML 里，也可以留空后在页面中填写：
 
 ```toml
 [llm]
 provider = "openai"
 model = "gpt-4.1-mini"
-api_key_env = "OPENAI_API_KEY"
+api_key = ""
 base_url = "https://api.openai.com/v1"
 ```
 
@@ -125,7 +121,13 @@ source 级别的 `pipeline.system_prompt`、`pipeline.task_prompt` 可以覆盖 
 
 ```powershell
 docker build -t rss-gateway .
-docker run --rm -p 8080:8080 -e OPENAI_API_KEY=your-key rss-gateway
+docker run --rm -p 8080:8080 -v ${PWD}/configs/config.toml:/app/configs/config.toml:ro -v ${PWD}/data:/app/data rss-gateway
+```
+
+也可以直接使用仓库里的 `docker-compose.yml` 从 GHCR 拉取镜像：
+
+```powershell
+docker compose up -d
 ```
 
 ## CI 与 Release

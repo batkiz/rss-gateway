@@ -1,9 +1,9 @@
 services:
   rss-gateway:
-    build: .
+    image: ghcr.io/batkiz/rss-gateway:latest
+    pull_policy: always
     ports:
       - "8080:8080"
-    environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
     volumes:
       - ./data:/app/data
+      - ./configs/config.toml:/app/configs/config.toml:ro

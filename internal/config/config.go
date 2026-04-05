@@ -27,12 +27,11 @@ type StorageConfig struct {
 }
 
 type LLMConfig struct {
-	Provider  string `toml:"provider"`
-	Model     string `toml:"model"`
-	APIKey    string `toml:"api_key"`
-	APIKeyEnv string `toml:"api_key_env"`
-	BaseURL   string `toml:"base_url"`
-	Timeout   string `toml:"timeout"`
+	Provider string `toml:"provider"`
+	Model    string `toml:"model"`
+	APIKey   string `toml:"api_key"`
+	BaseURL  string `toml:"base_url"`
+	Timeout  string `toml:"timeout"`
 }
 
 type Source struct {
@@ -163,9 +162,6 @@ func (c *Config) applyDefaults() {
 }
 
 func (c *Config) validateAndResolve() error {
-	if c.LLM.APIKey == "" && c.LLM.APIKeyEnv != "" {
-		c.LLM.APIKey = os.Getenv(c.LLM.APIKeyEnv)
-	}
 	for _, source := range c.Sources {
 		if source.ID == "" {
 			return fmt.Errorf("source id is required")

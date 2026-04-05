@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "configs/config.example.toml", "path to config file")
+	configPath := flag.String("config", "configs/config.toml", "path to config file")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)

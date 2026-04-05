@@ -18,19 +18,13 @@ A Go-based RSS gateway that adds LLM processing to upstream feeds and emits tran
 
 ## Quick Start
 
-1. Set your API key:
+1. Run the server:
 
 ```powershell
-$env:OPENAI_API_KEY="your-key"
+go run ./cmd/server -config configs/config.toml
 ```
 
-2. Run the server:
-
-```powershell
-go run ./cmd/server -config configs/config.example.toml
-```
-
-3. Open:
+2. Open:
 
 - `http://localhost:8080/healthz`
 - `http://localhost:8080/`
@@ -39,6 +33,8 @@ go run ./cmd/server -config configs/config.example.toml
 - `http://localhost:8080/api/sources`
 - `http://localhost:8080/api/status`
 - `http://localhost:8080/feeds/hackernews-summary.rss`
+
+3. On first use, open `http://localhost:8080/settings/llm` and fill in the LLM provider, model, API key, and base URL.
 
 4. Trigger refresh manually:
 
@@ -61,13 +57,13 @@ The web pages can now edit runtime configuration directly:
 These values are stored in SQLite and apply immediately after save.  
 TOML is still supported, but mainly as the initial seed on first startup. Once runtime config already exists in SQLite, later restarts will not overwrite it from TOML.
 
-`llm.base_url` can be used with OpenAI-compatible gateways:
+`llm.base_url` can be used with OpenAI-compatible gateways. `api_key` can be stored directly in TOML, or left empty and filled in from the web UI:
 
 ```toml
 [llm]
 provider = "openai"
 model = "gpt-4.1-mini"
-api_key_env = "OPENAI_API_KEY"
+api_key = ""
 base_url = "https://api.openai.com/v1"
 ```
 
@@ -125,7 +121,13 @@ Docker is supported:
 
 ```powershell
 docker build -t rss-gateway .
-docker run --rm -p 8080:8080 -e OPENAI_API_KEY=your-key rss-gateway
+docker run --rm -p 8080:8080 -v ${PWD}/configs/config.toml:/app/configs/config.toml:ro -v ${PWD}/data:/app/data rss-gateway
+```
+
+You can also use the included `docker-compose.yml` to pull the image from GHCR directly:
+
+```powershell
+docker compose up -d
 ```
 
 ## CI And Release
