@@ -408,7 +408,7 @@ func textsFor(lang string) AdminText {
 			SelectedFeed:       "当前订阅",
 			StoredItems:        "已存储条目",
 			QuickActions:       "快捷操作",
-			ActionsHint:        "一次操作一个 source。JSON 管理接口仍然保留在同名 `/admin/*` 路径下。",
+			ActionsHint:        "一次操作一个 source。JSON 管理接口仍然保留在 `/admin/*` 路径下。",
 			Source:             "订阅源",
 			OpenSourceView:     "打开当前视图",
 			RefreshSelected:    "刷新当前订阅",
@@ -488,7 +488,7 @@ func textsFor(lang string) AdminText {
 		SelectedFeed:       "Selected Feed",
 		StoredItems:        "Stored Items",
 		QuickActions:       "Quick Actions",
-		ActionsHint:        "Run against one source at a time. The JSON admin APIs stay available under the same /admin/* paths.",
+		ActionsHint:        "Run against one source at a time. The JSON admin APIs stay available under /admin/*.",
 		Source:             "Source",
 		OpenSourceView:     "Open Source View",
 		RefreshSelected:    "Refresh Selected Source",
@@ -647,23 +647,23 @@ func maskAPIKey(value string) string {
 
 func buildNavItems(r *http.Request, text AdminText, selectedSource, selectedMode, section string) []AdminNavItem {
 	return []AdminNavItem{
-		{Label: text.Dashboard, Href: adminURL("/admin", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionDashboard},
-		{Label: text.LLMSettingsTitle, Href: adminURL("/admin/settings/llm", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionLLM},
-		{Label: text.ModesTitle, Href: adminURL("/admin/modes", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionModes},
-		{Label: text.SourcesTitle, Href: adminURL("/admin/sources", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionSources},
+		{Label: text.Dashboard, Href: adminURL("/", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionDashboard},
+		{Label: text.LLMSettingsTitle, Href: adminURL("/settings/llm", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionLLM},
+		{Label: text.ModesTitle, Href: adminURL("/modes", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionModes},
+		{Label: text.SourcesTitle, Href: adminURL("/sources/manage", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionSources},
 	}
 }
 
 func navPath(vm AdminPageView) string {
 	switch vm.Section {
 	case AdminSectionLLM:
-		return "/admin/settings/llm"
+		return "/settings/llm"
 	case AdminSectionModes:
-		return "/admin/modes"
+		return "/modes"
 	case AdminSectionSources:
-		return "/admin/sources"
+		return "/sources/manage"
 	default:
-		return "/admin"
+		return "/"
 	}
 }
 

@@ -971,9 +971,9 @@ func dashboardSection(vm AdminPageView) templ.Component {
 										return templ_7745c5c3_Err
 									}
 									var templ_7745c5c3_Var56 templ.SafeURL
-									templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinURLErrs(adminURL("/admin", source.ID, vm.SelectedMode, vm.Lang))
+									templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinURLErrs(adminURL("/", source.ID, vm.SelectedMode, vm.Lang))
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 178, Col: 75}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 178, Col: 70}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 									if templ_7745c5c3_Err != nil {
@@ -986,7 +986,7 @@ func dashboardSection(vm AdminPageView) templ.Component {
 									var templ_7745c5c3_Var57 string
 									templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.JoinStringErrs(source.Name)
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 178, Col: 146}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 178, Col: 141}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var57))
 									if templ_7745c5c3_Err != nil {
@@ -1507,7 +1507,7 @@ func dashboardSection(vm AdminPageView) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 93, "<form method=\"post\" action=\"/admin\"><input type=\"hidden\" name=\"lang\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 93, "<form method=\"post\" action=\"/\"><input type=\"hidden\" name=\"lang\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1577,7 +1577,7 @@ func dashboardSection(vm AdminPageView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 97, "</form><form method=\"post\" action=\"/admin\" class=\"grid gap-2\"><input type=\"hidden\" name=\"lang\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 97, "</form><form method=\"post\" action=\"/\" class=\"grid gap-2\"><input type=\"hidden\" name=\"lang\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1647,7 +1647,7 @@ func dashboardSection(vm AdminPageView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 101, "</div></form><form method=\"post\" action=\"/admin\"><input type=\"hidden\" name=\"lang\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 101, "</div></form><form method=\"post\" action=\"/\"><input type=\"hidden\" name=\"lang\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2443,7 +2443,7 @@ func llmSection(vm AdminPageView) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 149, "<form method=\"post\" action=\"/admin/settings/llm\" class=\"grid gap-3\"><input type=\"hidden\" name=\"lang\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 149, "<form method=\"post\" action=\"/settings/llm\" class=\"grid gap-3\"><input type=\"hidden\" name=\"lang\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3093,9 +3093,9 @@ func modesSection(vm AdminPageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var177 templ.SafeURL
-				templ_7745c5c3_Var177, templ_7745c5c3_Err = templ.JoinURLErrs(adminURL("/admin/modes", vm.SelectedSource, "", vm.Lang))
+				templ_7745c5c3_Var177, templ_7745c5c3_Err = templ.JoinURLErrs(adminURL("/modes", vm.SelectedSource, "", vm.Lang))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 427, Col: 70}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 427, Col: 64}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var177))
 				if templ_7745c5c3_Err != nil {
@@ -3108,7 +3108,7 @@ func modesSection(vm AdminPageView) templ.Component {
 				var templ_7745c5c3_Var178 string
 				templ_7745c5c3_Var178, templ_7745c5c3_Err = templ.JoinStringErrs(vm.Text.NewMode)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 427, Col: 154}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 427, Col: 148}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var178))
 				if templ_7745c5c3_Err != nil {
@@ -3124,9 +3124,9 @@ func modesSection(vm AdminPageView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var179 templ.SafeURL
-					templ_7745c5c3_Var179, templ_7745c5c3_Err = templ.JoinURLErrs(adminURL("/admin/modes", vm.SelectedSource, mode.Name, vm.Lang))
+					templ_7745c5c3_Var179, templ_7745c5c3_Err = templ.JoinURLErrs(adminURL("/modes", vm.SelectedSource, mode.Name, vm.Lang))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 431, Col: 80}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 431, Col: 74}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var179))
 					if templ_7745c5c3_Err != nil {
@@ -3139,7 +3139,7 @@ func modesSection(vm AdminPageView) templ.Component {
 					var templ_7745c5c3_Var180 string
 					templ_7745c5c3_Var180, templ_7745c5c3_Err = templ.JoinStringErrs(mode.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 431, Col: 149}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 431, Col: 143}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var180))
 					if templ_7745c5c3_Err != nil {
@@ -3825,9 +3825,9 @@ func sourcesSection(vm AdminPageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var223 templ.SafeURL
-				templ_7745c5c3_Var223, templ_7745c5c3_Err = templ.JoinURLErrs(adminURL("/admin/sources", "", vm.SelectedMode, vm.Lang))
+				templ_7745c5c3_Var223, templ_7745c5c3_Err = templ.JoinURLErrs(adminURL("/sources/manage", "", vm.SelectedMode, vm.Lang))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 517, Col: 70}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 517, Col: 71}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var223))
 				if templ_7745c5c3_Err != nil {
@@ -3840,7 +3840,7 @@ func sourcesSection(vm AdminPageView) templ.Component {
 				var templ_7745c5c3_Var224 string
 				templ_7745c5c3_Var224, templ_7745c5c3_Err = templ.JoinStringErrs(vm.Text.NewSource)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 517, Col: 156}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 517, Col: 157}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var224))
 				if templ_7745c5c3_Err != nil {
@@ -3856,9 +3856,9 @@ func sourcesSection(vm AdminPageView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var225 templ.SafeURL
-					templ_7745c5c3_Var225, templ_7745c5c3_Err = templ.JoinURLErrs(adminURL("/admin/sources", source.ID, vm.SelectedMode, vm.Lang))
+					templ_7745c5c3_Var225, templ_7745c5c3_Err = templ.JoinURLErrs(adminURL("/sources/manage", source.ID, vm.SelectedMode, vm.Lang))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 521, Col: 80}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 521, Col: 81}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var225))
 					if templ_7745c5c3_Err != nil {
@@ -3871,7 +3871,7 @@ func sourcesSection(vm AdminPageView) templ.Component {
 					var templ_7745c5c3_Var226 string
 					templ_7745c5c3_Var226, templ_7745c5c3_Err = templ.JoinStringErrs(source.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 521, Col: 151}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/admin.templ`, Line: 521, Col: 152}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var226))
 					if templ_7745c5c3_Err != nil {

@@ -61,7 +61,7 @@ func main() {
 }
 
 func logStartupInfo(cfg config.Config) {
-	log.Printf("http endpoints health=%s sources=%s admin=%s status=%s", "/healthz", "/sources", "/admin", "/admin/status")
+	log.Printf("http endpoints health=%s sources=%s dashboard=%s status=%s", "/healthz", "/sources", "/", "/admin/status")
 
 	sourceIDs := make([]string, 0, len(cfg.Sources))
 	for _, source := range cfg.Sources {

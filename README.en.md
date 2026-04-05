@@ -34,7 +34,7 @@ go run ./cmd/server -config configs/config.example.toml
 
 - `http://localhost:8080/healthz`
 - `http://localhost:8080/sources`
-- `http://localhost:8080/admin`
+- `http://localhost:8080/`
 - `http://localhost:8080/admin/status`
 - `http://localhost:8080/feeds/hackernews-summary.rss`
 
@@ -103,7 +103,10 @@ Source-level `pipeline.system_prompt` and `pipeline.task_prompt` can override mo
 
 ## Admin Endpoints
 
-- `GET /admin`: admin page, supports `?lang=zh|en`
+- `GET /`: dashboard page, supports `?lang=zh|en`
+- `GET /settings/llm`: LLM settings page
+- `GET /modes`: mode management page
+- `GET /sources/manage`: source management page
 - `POST /admin/settings/llm`: save runtime LLM settings
 - `POST /admin/settings/mode`: save a mode
 - `POST /admin/settings/source`: save a source

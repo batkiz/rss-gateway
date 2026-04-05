@@ -34,7 +34,7 @@ go run ./cmd/server -config configs/config.example.toml
 
 - `http://localhost:8080/healthz`
 - `http://localhost:8080/sources`
-- `http://localhost:8080/admin`
+- `http://localhost:8080/`
 - `http://localhost:8080/admin/status`
 - `http://localhost:8080/feeds/hackernews-summary.rss`
 
@@ -103,7 +103,10 @@ source 级别的 `pipeline.system_prompt`、`pipeline.task_prompt` 可以覆盖 
 
 ## 管理接口
 
-- `GET /admin`：管理页面，支持 `?lang=zh|en`
+- `GET /`：仪表盘页面，支持 `?lang=zh|en`
+- `GET /settings/llm`：LLM 设置页面
+- `GET /modes`：mode 管理页面
+- `GET /sources/manage`：source 管理页面
 - `POST /admin/settings/llm`：保存运行时 LLM 配置
 - `POST /admin/settings/mode`：保存 mode
 - `POST /admin/settings/source`：保存 source
