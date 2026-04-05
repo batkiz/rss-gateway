@@ -114,6 +114,7 @@ GitHub Actions 当前包含两类流程：
 
 - `ci`：运行 `go test ./...`、`go build ./...`，并构建 `linux/amd64` 与 `linux/arm64` Docker 镜像
 - `release`：发布 GitHub Release 时，构建 `linux`、`darwin`、`windows` 的 `amd64` / `arm64` 二进制并上传为 release asset
+- `tag-release`：手动输入版本号，创建 `vX.Y.Z` tag，并使用 GitHub 自动生成 release notes 作为 changelog
 
 容器镜像会发布到：
 

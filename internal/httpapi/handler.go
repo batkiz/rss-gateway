@@ -277,14 +277,19 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, r *http.Request, messag
 	}
 
 	rawItems := make([]model.RawItem, 0)
+	processedItems := make([]model.ProcessedItem, 0)
 	if selectedSource != "" {
 		rawItems, err = h.service.ListRawItems(r.Context(), selectedSource, 8)
 		if err != nil {
 			errText = err.Error()
 		}
+		processedItems, err = h.service.ListProcessedItems(r.Context(), selectedSource, 8)
+		if err != nil && errText == "" {
+			errText = err.Error()
+		}
 	}
 
-	vm := ui.BuildAdminPageView(r, h.service.Sources(), status, rawItems, selectedSource, message, errText)
+	vm := ui.BuildAdminPageView(r, h.service.Sources(), status, rawItems, processedItems, selectedSource, message, errText)
 	templ.Handler(ui.AdminPage(vm)).ServeHTTP(w, r)
 }
 

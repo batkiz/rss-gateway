@@ -166,7 +166,7 @@ templ AdminPage(vm AdminPageView) {
 					}
 				</div>
 
-				<div class="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+				<div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
 					@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
 						@card.Header() {
 							<div class="flex items-center justify-between gap-4">
@@ -243,7 +243,8 @@ templ AdminPage(vm AdminPageView) {
 						}
 					}
 
-					@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
+					<div class="grid gap-6">
+						@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
 						@card.Header() {
 							@card.Title() {
 								<div class="text-xl font-semibold">{ vm.Text.SelectedSource }</div>
@@ -274,7 +275,42 @@ templ AdminPage(vm AdminPageView) {
 								}
 							}
 						}
-					}
+						}
+						@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
+							@card.Header() {
+								@card.Title() {
+									<div class="text-xl font-semibold">{ vm.Text.RecentProcessed }</div>
+								}
+								@card.Description() {
+									<div class="text-sm text-muted-foreground">{ vm.Text.FeedOutput }</div>
+								}
+							}
+							@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-0"}) {
+								if len(vm.ProcessedItems) == 0 {
+									<div class="rounded-xl border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">{ vm.Text.NoProcessed }</div>
+								} else {
+									for _, item := range vm.ProcessedItems {
+										<div class="rounded-xl border border-border/80 bg-background/60 p-4">
+											<div class="flex items-start justify-between gap-3">
+												<div class="font-medium">{ fallback(item.OutputTitle, item.OriginalTitle) }</div>
+												@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+													{ item.ProcessedAt.Format("01-02 15:04") }
+												}
+											</div>
+											<div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+												@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) { vm.Text.Model + ": " + item.Model }
+												@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) { vm.Text.ProcessedAt + ": " + item.ProcessedAt.Format("2006-01-02 15:04:05") }
+											</div>
+											if item.OriginalLink != "" {
+												<a href={ item.OriginalLink } class="mt-3 block text-xs text-primary underline-offset-4 hover:underline">{ shorten(item.OriginalLink, 90) }</a>
+											}
+											<div class="mt-3 text-sm leading-6 text-foreground/90">{ shorten(item.OutputSummary, 260) }</div>
+										</div>
+									}
+								}
+							}
+						}
+					</div>
 				</div>
 			</div>
 		</body>

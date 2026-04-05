@@ -114,6 +114,7 @@ GitHub Actions currently includes:
 
 - `ci`: runs `go test ./...`, `go build ./...`, and builds Docker images for `linux/amd64` and `linux/arm64`
 - `release`: on GitHub Release publication, builds binaries for `linux`, `darwin`, and `windows` on `amd64` / `arm64` and uploads them as release assets
+- `tag-release`: manually create a `vX.Y.Z` tag and GitHub release with auto-generated release notes as the changelog
 
 Container images are published to:
 

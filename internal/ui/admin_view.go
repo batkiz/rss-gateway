@@ -22,6 +22,7 @@ type AdminPageView struct {
 	SelectedSource string
 	Sources        []AdminSourceView
 	RawItems       []model.RawItem
+	ProcessedItems []model.ProcessedItem
 }
 
 type AdminText struct {
@@ -54,8 +55,13 @@ type AdminText struct {
 	OpenFeed        string
 	SelectedSource  string
 	RecentRawItems  string
+	RecentProcessed string
 	FeedOutput      string
 	NoRawItems      string
+	NoProcessed     string
+	Summary         string
+	ProcessedAt     string
+	Model           string
 	Fetched         string
 	Processed       string
 	RawProcessed    string
@@ -79,7 +85,7 @@ type AdminSourceView struct {
 	ProcessedItemCount   int
 }
 
-func BuildAdminPageView(r *http.Request, sources map[string]model.Source, states []model.FeedState, rawItems []model.RawItem, selectedSource, message, errText string) AdminPageView {
+func BuildAdminPageView(r *http.Request, sources map[string]model.Source, states []model.FeedState, rawItems []model.RawItem, processedItems []model.ProcessedItem, selectedSource, message, errText string) AdminPageView {
 	lang := detectLanguage(r)
 	text := textsFor(lang)
 
@@ -126,6 +132,7 @@ func BuildAdminPageView(r *http.Request, sources map[string]model.Source, states
 		SelectedSource: selectedSource,
 		Sources:        sourceViews,
 		RawItems:       rawItems,
+		ProcessedItems: processedItems,
 	}
 }
 
@@ -277,8 +284,13 @@ func textsFor(lang string) AdminText {
 			OpenFeed:        "打开 feed",
 			SelectedSource:  "当前订阅详情",
 			RecentRawItems:  "最近原始条目",
+			RecentProcessed: "最近处理结果",
 			FeedOutput:      "Feed 输出地址",
 			NoRawItems:      "这个订阅目前还没有存储任何原始条目。",
+			NoProcessed:     "这个订阅目前还没有处理结果。",
+			Summary:         "摘要",
+			ProcessedAt:     "处理时间",
+			Model:           "模型",
 			Fetched:         "抓取",
 			Processed:       "处理",
 			RawProcessed:    "原始/输出",
@@ -316,8 +328,13 @@ func textsFor(lang string) AdminText {
 		OpenFeed:        "open feed",
 		SelectedSource:  "Selected Source",
 		RecentRawItems:  "Recent raw items stored before LLM processing.",
+		RecentProcessed: "Recent processed items emitted to RSS.",
 		FeedOutput:      "Feed Output",
 		NoRawItems:      "No raw items stored yet for this source.",
+		NoProcessed:     "No processed items yet for this source.",
+		Summary:         "Summary",
+		ProcessedAt:     "Processed At",
+		Model:           "Model",
 		Fetched:         "fetched",
 		Processed:       "processed",
 		RawProcessed:    "raw / processed",
