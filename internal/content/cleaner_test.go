@@ -40,3 +40,14 @@ func TestExtractReadableHTMLPrefersMainContentOverSidebar(t *testing.T) {
 		t.Fatalf("unexpected sidebar text in extracted text: %q", text)
 	}
 }
+
+func TestExtractReadableHTMLKeepsCommentaryBody(t *testing.T) {
+	html := `<html><body><div class="commentary-body"><p>Essay opening.</p><p>Essay closing.</p></div></body></html>`
+	_, text, err := ExtractReadableHTML(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("ExtractReadableHTML error: %v", err)
+	}
+	if !strings.Contains(text, "Essay opening.") || !strings.Contains(text, "Essay closing.") {
+		t.Fatalf("expected commentary body content, got %q", text)
+	}
+}

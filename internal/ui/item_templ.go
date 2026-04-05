@@ -1376,7 +1376,18 @@ func ItemPage(vm ItemPageView) templ.Component {
 }
 
 func marshalPreviewRequest(req model.ProcessRequest) string {
-	data, err := json.MarshalIndent(req, "", "  ")
+	payload := map[string]any{
+		"mode":              req.Mode,
+		"title":             req.Title,
+		"link":              req.Link,
+		"system_prompt":     req.SystemPrompt,
+		"task_prompt":       req.TaskPrompt,
+		"max_input_chars":   req.MaxInputChars,
+		"temperature":       req.Temperature,
+		"max_output_tokens": req.MaxOutputTokens,
+		"content_chars":     len(req.Content),
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return "{}"
 	}

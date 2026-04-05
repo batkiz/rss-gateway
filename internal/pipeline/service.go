@@ -349,7 +349,11 @@ func (s *Service) processRawItem(ctx context.Context, source model.Source, item 
 		return false, nil
 	}
 	_, _, err = s.processRawItemWithOverrides(ctx, source, item, model.ProcessOverrides{}, force, true)
-	return err == nil, err
+	if err != nil {
+		log.Printf("process item source=%s guid=%s: %v", source.ID, item.GUID, err)
+		return false, nil
+	}
+	return true, nil
 }
 
 func (s *Service) PreviewItem(ctx context.Context, sourceID, guid string, overrides model.ProcessOverrides) (model.ItemProcessPreview, error) {

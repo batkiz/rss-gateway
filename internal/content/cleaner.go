@@ -94,10 +94,31 @@ func cleanDocument(doc *goquery.Document) {
 		classValue, _ := sel.Attr("class")
 		idValue, _ := sel.Attr("id")
 		combined := strings.ToLower(classValue + " " + idValue)
-		if strings.Contains(combined, "comment") || strings.Contains(combined, "share") || strings.Contains(combined, "footer") || strings.Contains(combined, "sidebar") {
+		if hasNoiseToken(combined, "comments", "comment-list", "share", "sharing", "footer", "sidebar", "breadcrumbs", "breadcrumb") {
 			sel.Remove()
 		}
 	})
+}
+
+func hasNoiseToken(value string, tokens ...string) bool {
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		switch {
+		case r >= 'a' && r <= 'z':
+			return false
+		case r >= '0' && r <= '9':
+			return false
+		default:
+			return true
+		}
+	})
+	for _, part := range parts {
+		for _, token := range tokens {
+			if part == token {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func selectReadableRoot(doc *goquery.Document) *goquery.Selection {
