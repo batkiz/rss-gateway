@@ -40,20 +40,16 @@ func (h *Handler) Router() *chi.Mux {
 	r.Get("/", h.handleDashboardPage)
 	r.Post("/", h.handleAdminAction)
 	r.Get("/settings/llm", h.handleLLMPage)
-	r.Post("/settings/llm", h.handleSaveLLMSettings)
+	r.Post("/api/settings/llm", h.handleSaveLLMSettings)
 	r.Get("/modes", h.handleModesPage)
-	r.Post("/admin/settings/mode", h.handleSaveMode)
-	r.Get("/sources/manage", h.handleSourcesPage)
-	r.Post("/admin/settings/source", h.handleSaveSource)
-	r.Get("/admin", redirectGet("/"))
-	r.Get("/admin/settings/llm", redirectGet("/settings/llm"))
-	r.Get("/admin/modes", redirectGet("/modes"))
-	r.Get("/admin/sources", redirectGet("/sources/manage"))
-	r.Get("/admin/status", h.handleStatus)
-	r.Post("/admin/refresh", h.handleRefresh)
-	r.Post("/admin/reprocess", h.handleReprocess)
-	r.Get("/admin/raw-items", h.handleRawItems)
-	r.Get("/sources", h.handleSources)
+	r.Post("/api/settings/mode", h.handleSaveMode)
+	r.Get("/sources", h.handleSourcesPage)
+	r.Post("/api/settings/source", h.handleSaveSource)
+	r.Get("/api/status", h.handleStatus)
+	r.Post("/api/refresh", h.handleRefresh)
+	r.Post("/api/reprocess", h.handleReprocess)
+	r.Get("/api/raw-items", h.handleRawItems)
+	r.Get("/api/sources", h.handleSources)
 	r.Get("/feeds/{sourceID}.rss", h.handleFeed)
 	return r
 }
@@ -218,7 +214,7 @@ func (h *Handler) handleSaveMode(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleSaveSource(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.redirectAdmin(w, r, "/sources/manage", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
+		h.redirectAdmin(w, r, "/sources", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
@@ -226,12 +222,12 @@ func (h *Handler) handleSaveSource(w http.ResponseWriter, r *http.Request) {
 
 	refreshInterval, err := time.ParseDuration(strings.TrimSpace(r.FormValue("refresh_interval")))
 	if err != nil {
-		h.redirectAdmin(w, r, "/sources/manage", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid refresh interval")
+		h.redirectAdmin(w, r, "/sources", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid refresh interval")
 		return
 	}
 	temperature, err := parseOptionalFloat(r.FormValue("temperature"))
 	if err != nil {
-		h.redirectAdmin(w, r, "/sources/manage", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
+		h.redirectAdmin(w, r, "/sources", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
 		return
 	}
 
@@ -251,10 +247,10 @@ func (h *Handler) handleSaveSource(w http.ResponseWriter, r *http.Request) {
 		MaxOutputTokens: positiveInt(r.FormValue("max_output_tokens"), 0),
 	}
 	if err := h.service.SaveSource(ctx, source); err != nil {
-		h.redirectAdmin(w, r, "/sources/manage", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
+		h.redirectAdmin(w, r, "/sources", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
 		return
 	}
-	h.redirectAdmin(w, r, "/sources/manage", source.ID, r.FormValue("mode"), r.FormValue("lang"), "saved source "+source.ID, "")
+	h.redirectAdmin(w, r, "/sources", source.ID, r.FormValue("mode"), r.FormValue("lang"), "saved source "+source.ID, "")
 }
 
 func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
@@ -493,14 +489,4 @@ func requestLogger(next http.Handler) http.Handler {
 		requestID := chimiddleware.GetReqID(r.Context())
 		log.Printf("http method=%s path=%s status=%d remote=%s request_id=%s duration=%s", r.Method, r.URL.RequestURI(), recorder.status, r.RemoteAddr, requestID, time.Since(start).Round(time.Millisecond))
 	})
-}
-
-func redirectGet(target string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		qs := r.URL.RawQuery
-		if qs != "" {
-			target += "?" + qs
-		}
-		http.Redirect(w, r, target, http.StatusMovedPermanently)
-	}
 }

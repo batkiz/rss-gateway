@@ -408,7 +408,7 @@ func textsFor(lang string) AdminText {
 			SelectedFeed:       "当前订阅",
 			StoredItems:        "已存储条目",
 			QuickActions:       "快捷操作",
-			ActionsHint:        "一次操作一个 source。JSON 管理接口仍然保留在 `/admin/*` 路径下。",
+			ActionsHint:        "一次操作一个 source。JSON 接口统一保留在 `/api/*` 路径下。",
 			Source:             "订阅源",
 			OpenSourceView:     "打开当前视图",
 			RefreshSelected:    "刷新当前订阅",
@@ -488,7 +488,7 @@ func textsFor(lang string) AdminText {
 		SelectedFeed:       "Selected Feed",
 		StoredItems:        "Stored Items",
 		QuickActions:       "Quick Actions",
-		ActionsHint:        "Run against one source at a time. The JSON admin APIs stay available under /admin/*.",
+		ActionsHint:        "Run against one source at a time. JSON APIs stay under /api/*.",
 		Source:             "Source",
 		OpenSourceView:     "Open Source View",
 		RefreshSelected:    "Refresh Selected Source",
@@ -650,7 +650,7 @@ func buildNavItems(r *http.Request, text AdminText, selectedSource, selectedMode
 		{Label: text.Dashboard, Href: adminURL("/", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionDashboard},
 		{Label: text.LLMSettingsTitle, Href: adminURL("/settings/llm", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionLLM},
 		{Label: text.ModesTitle, Href: adminURL("/modes", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionModes},
-		{Label: text.SourcesTitle, Href: adminURL("/sources/manage", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionSources},
+		{Label: text.SourcesTitle, Href: adminURL("/sources", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionSources},
 	}
 }
 
@@ -661,7 +661,7 @@ func navPath(vm AdminPageView) string {
 	case AdminSectionModes:
 		return "/modes"
 	case AdminSectionSources:
-		return "/sources/manage"
+		return "/sources"
 	default:
 		return "/"
 	}

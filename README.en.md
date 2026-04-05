@@ -33,24 +33,25 @@ go run ./cmd/server -config configs/config.example.toml
 3. Open:
 
 - `http://localhost:8080/healthz`
-- `http://localhost:8080/sources`
 - `http://localhost:8080/`
-- `http://localhost:8080/admin/status`
+- `http://localhost:8080/sources`
+- `http://localhost:8080/api/sources`
+- `http://localhost:8080/api/status`
 - `http://localhost:8080/feeds/hackernews-summary.rss`
 
 4. Trigger refresh manually:
 
 ```powershell
-Invoke-WebRequest -Method POST http://localhost:8080/admin/refresh
-Invoke-WebRequest -Method POST "http://localhost:8080/admin/refresh?source=hackernews-summary"
-Invoke-WebRequest -Method POST "http://localhost:8080/admin/reprocess?source=hackernews-summary&limit=10"
+Invoke-WebRequest -Method POST http://localhost:8080/api/refresh
+Invoke-WebRequest -Method POST "http://localhost:8080/api/refresh?source=hackernews-summary"
+Invoke-WebRequest -Method POST "http://localhost:8080/api/reprocess?source=hackernews-summary&limit=10"
 ```
 
 ## Configuration
 
 Only TOML is supported.
 
-`/admin` can now edit runtime configuration directly:
+The web pages can now edit runtime configuration directly:
 
 - LLM provider / model / API key / base URL / timeout
 - modes
@@ -71,7 +72,7 @@ base_url = "https://api.openai.com/v1"
 
 ## Mode Configuration
 
-Modes can still be defined in TOML for the initial seed, and then edited directly in `/admin`. Define a mode, then reference it from a source:
+Modes can still be defined in TOML for the initial seed, and then edited directly in the web UI. Define a mode, then reference it from a source:
 
 ```toml
 [modes.summary]
@@ -106,14 +107,15 @@ Source-level `pipeline.system_prompt` and `pipeline.task_prompt` can override mo
 - `GET /`: dashboard page, supports `?lang=zh|en`
 - `GET /settings/llm`: LLM settings page
 - `GET /modes`: mode management page
-- `GET /sources/manage`: source management page
-- `POST /admin/settings/llm`: save runtime LLM settings
-- `POST /admin/settings/mode`: save a mode
-- `POST /admin/settings/source`: save a source
-- `GET /admin/status`: per-source refresh status and item counts
-- `POST /admin/refresh?source=<id>`: fetch and process the latest feed
-- `POST /admin/reprocess?source=<id>&limit=<n>`: rerun LLM processing from stored raw items
-- `GET /admin/raw-items?source=<id>&limit=<n>`: inspect recent stored raw items
+- `GET /sources`: source management page
+- `POST /api/settings/llm`: save runtime LLM settings
+- `POST /api/settings/mode`: save a mode
+- `POST /api/settings/source`: save a source
+- `GET /api/status`: per-source refresh status and item counts
+- `POST /api/refresh?source=<id>`: fetch and process the latest feed
+- `POST /api/reprocess?source=<id>&limit=<n>`: rerun LLM processing from stored raw items
+- `GET /api/raw-items?source=<id>&limit=<n>`: inspect recent stored raw items
+- `GET /api/sources`: return the source list as JSON
 
 ## Deployment
 

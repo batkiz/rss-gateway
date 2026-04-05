@@ -33,24 +33,25 @@ go run ./cmd/server -config configs/config.example.toml
 3. 打开这些地址：
 
 - `http://localhost:8080/healthz`
-- `http://localhost:8080/sources`
 - `http://localhost:8080/`
-- `http://localhost:8080/admin/status`
+- `http://localhost:8080/sources`
+- `http://localhost:8080/api/sources`
+- `http://localhost:8080/api/status`
 - `http://localhost:8080/feeds/hackernews-summary.rss`
 
 4. 手动触发刷新：
 
 ```powershell
-Invoke-WebRequest -Method POST http://localhost:8080/admin/refresh
-Invoke-WebRequest -Method POST "http://localhost:8080/admin/refresh?source=hackernews-summary"
-Invoke-WebRequest -Method POST "http://localhost:8080/admin/reprocess?source=hackernews-summary&limit=10"
+Invoke-WebRequest -Method POST http://localhost:8080/api/refresh
+Invoke-WebRequest -Method POST "http://localhost:8080/api/refresh?source=hackernews-summary"
+Invoke-WebRequest -Method POST "http://localhost:8080/api/reprocess?source=hackernews-summary&limit=10"
 ```
 
 ## 配置
 
 当前只支持 TOML 配置。
 
-`/admin` 现在可以直接编辑运行时配置：
+页面现在可以直接编辑运行时配置：
 
 - LLM provider / model / API key / base URL / timeout
 - modes
@@ -71,7 +72,7 @@ base_url = "https://api.openai.com/v1"
 
 ## Mode 配置
 
-mode 仍然支持通过 TOML 做初始定义，启动首次 seed 后也可以直接在 `/admin` 中编辑。先定义 mode，再让 source 引用：
+mode 仍然支持通过 TOML 做初始定义，启动首次 seed 后也可以直接在页面中编辑。先定义 mode，再让 source 引用：
 
 ```toml
 [modes.summary]
@@ -106,14 +107,15 @@ source 级别的 `pipeline.system_prompt`、`pipeline.task_prompt` 可以覆盖 
 - `GET /`：仪表盘页面，支持 `?lang=zh|en`
 - `GET /settings/llm`：LLM 设置页面
 - `GET /modes`：mode 管理页面
-- `GET /sources/manage`：source 管理页面
-- `POST /admin/settings/llm`：保存运行时 LLM 配置
-- `POST /admin/settings/mode`：保存 mode
-- `POST /admin/settings/source`：保存 source
-- `GET /admin/status`：按 source 查看刷新状态和条目计数
-- `POST /admin/refresh?source=<id>`：拉取并处理最新 feed
-- `POST /admin/reprocess?source=<id>&limit=<n>`：基于原始条目重新跑 LLM
-- `GET /admin/raw-items?source=<id>&limit=<n>`：查看最近保存的原始条目
+- `GET /sources`：source 管理页面
+- `POST /api/settings/llm`：保存运行时 LLM 配置
+- `POST /api/settings/mode`：保存 mode
+- `POST /api/settings/source`：保存 source
+- `GET /api/status`：按 source 查看刷新状态和条目计数
+- `POST /api/refresh?source=<id>`：拉取并处理最新 feed
+- `POST /api/reprocess?source=<id>&limit=<n>`：基于原始条目重新跑 LLM
+- `GET /api/raw-items?source=<id>&limit=<n>`：查看最近保存的原始条目
+- `GET /api/sources`：返回 source JSON 列表
 
 ## 部署
 
