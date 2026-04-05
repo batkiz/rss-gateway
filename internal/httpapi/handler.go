@@ -21,11 +21,12 @@ import (
 )
 
 type Handler struct {
-	service *pipeline.Service
+	service     *pipeline.Service
+	itemService *pipeline.ItemService
 }
 
-func New(service *pipeline.Service) *Handler {
-	return &Handler{service: service}
+func New(service *pipeline.Service, itemService *pipeline.ItemService) *Handler {
+	return &Handler{service: service, itemService: itemService}
 }
 
 func (h *Handler) Router() *chi.Mux {
@@ -283,14 +284,14 @@ func (h *Handler) handleItemAction(w http.ResponseWriter, r *http.Request) {
 	var message string
 	switch r.FormValue("action") {
 	case "preview":
-		result, err := h.service.PreviewItem(ctx, sourceID, guid, overrides)
+		result, err := h.itemService.PreviewItem(ctx, sourceID, guid, overrides)
 		if err != nil {
 			h.renderItemPage(w, r, nil, "", err.Error())
 			return
 		}
 		preview = &result
 	case "reprocess":
-		result, err := h.service.ReprocessItem(ctx, sourceID, guid, overrides)
+		result, err := h.itemService.ReprocessItem(ctx, sourceID, guid, overrides)
 		if err != nil {
 			h.renderItemPage(w, r, nil, "", err.Error())
 			return
@@ -459,12 +460,12 @@ func (h *Handler) renderItemPage(w http.ResponseWriter, r *http.Request, preview
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
-	rawItem, err := h.service.GetRawItem(ctx, sourceID, guid)
+	rawItem, err := h.itemService.GetRawItem(ctx, sourceID, guid)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
-	processed, err := h.service.GetProcessedItem(ctx, sourceID, guid)
+	processed, err := h.itemService.GetProcessedItem(ctx, sourceID, guid)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

@@ -18,6 +18,7 @@ import (
 type App struct {
 	store    *storage.SQLiteStore
 	service  *pipeline.Service
+	itemLab  *pipeline.ItemService
 	handler  *httpapi.Handler
 	cancelFn context.CancelFunc
 }
@@ -43,7 +44,8 @@ func New(cfg config.Config) (*App, error) {
 	log.Printf("runtime llm settings provider=%s model=%s base_url=%s", settings.Provider, settings.Model, settings.BaseURL)
 
 	service := pipeline.NewService(fetch, store)
-	handler := httpapi.New(service)
+	itemLab := pipeline.NewItemService(store)
+	handler := httpapi.New(service, itemLab)
 	sources, err := service.ListSources(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("list sources: %w", err)
@@ -52,6 +54,7 @@ func New(cfg config.Config) (*App, error) {
 	return &App{
 		store:   store,
 		service: service,
+		itemLab: itemLab,
 		handler: handler,
 	}, nil
 }

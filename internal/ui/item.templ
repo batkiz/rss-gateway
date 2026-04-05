@@ -74,7 +74,12 @@ templ ItemPage(vm ItemPageView) {
 						@card.Card(card.Props{Class: "bg-white"}) {
 							@card.Header() { @card.Title() { <div class="text-xl font-semibold">{ vm.Text.RawHTML }</div> } }
 							@card.Content(card.ContentProps{Class: "grid gap-4"}) {
-								<pre class="overflow-x-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5">{ vm.Raw.ContentHTML }</pre>
+								<details class="rounded-xl border border-slate-200 bg-slate-50">
+									<summary class="cursor-pointer px-4 py-3 text-sm font-medium text-slate-700">{ vm.Text.RawHTML }</summary>
+									<div class="border-t border-slate-200 px-4 py-4">
+										<pre class="overflow-x-auto whitespace-pre-wrap text-xs leading-5">{ vm.Raw.ContentHTML }</pre>
+									</div>
+								</details>
 							}
 						}
 					</div>
