@@ -38,3 +38,35 @@ mode = "summary"
 		t.Fatalf("unexpected schema defaults: %+v", mode.OutputSchema)
 	}
 }
+
+func TestEnsureFileWritesDefaultConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "configs", "config.toml")
+
+	created, err := EnsureFile(path)
+	if err != nil {
+		t.Fatalf("EnsureFile error: %v", err)
+	}
+	if !created {
+		t.Fatalf("expected config file to be created")
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load created config: %v", err)
+	}
+	if cfg.Server.Addr != ":8080" {
+		t.Fatalf("unexpected server addr: %s", cfg.Server.Addr)
+	}
+	if len(cfg.Sources) == 0 {
+		t.Fatalf("expected default sources to be present")
+	}
+
+	created, err = EnsureFile(path)
+	if err != nil {
+		t.Fatalf("EnsureFile on existing config error: %v", err)
+	}
+	if created {
+		t.Fatalf("expected existing config to be left untouched")
+	}
+}

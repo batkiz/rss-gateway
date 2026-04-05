@@ -81,6 +81,84 @@ type Duration struct {
 	time.Duration
 }
 
+const defaultConfigTOML = `[server]
+addr = ":8080"
+
+[storage]
+path = "data/rss-gateway.db"
+
+[llm]
+provider = "openai"
+model = "gpt-4.1-mini"
+api_key = ""
+base_url = "https://api.openai.com/v1"
+timeout = "60s"
+
+[modes.summary]
+system_prompt = "You transform RSS articles into concise reader-friendly summaries. Return strict JSON with title, summary, content. Preserve facts and links. Keep output compact and useful."
+temperature = 0.2
+max_output_tokens = 900
+task_prompt = """
+1. Keep or lightly rewrite the title for clarity.
+2. Write a short summary in 3 to 5 sentences.
+3. Produce concise output content suitable for an RSS reader.
+"""
+
+[modes.summary.output_schema]
+name = "summary"
+title_field = "title"
+summary_field = "summary"
+content_field = "content"
+
+[modes.translate_zh]
+system_prompt = "You transform RSS articles into Chinese reader-friendly output. Return strict JSON with title, summary, content. Preserve facts and links. Write concise simplified Chinese."
+temperature = 0.3
+max_output_tokens = 1200
+task_prompt = """
+1. Rewrite the title in simplified Chinese.
+2. Write a short Chinese summary in 3 to 5 sentences.
+3. Produce Chinese output content suitable for an RSS reader.
+"""
+
+[modes.translate_zh.output_schema]
+name = "translate_zh"
+title_field = "title"
+summary_field = "summary"
+content_field = "content"
+
+[[modes.translate_zh.output_schema.extra_fields]]
+name = "keywords"
+type = "array"
+description = "A short list of important keywords."
+required = false
+
+[[sources]]
+id = "hackernews-summary"
+name = "Hacker News Summary"
+url = "https://news.ycombinator.com/rss"
+refresh_interval = "10m"
+enabled = true
+max_items = 15
+
+[sources.pipeline]
+mode = "summary"
+max_input_chars = 6000
+extract_full_content = true
+
+[[sources]]
+id = "lobsters-translate"
+name = "Lobsters Chinese"
+url = "https://lobste.rs/rss"
+refresh_interval = "15m"
+enabled = true
+max_items = 15
+
+[sources.pipeline]
+mode = "translate_zh"
+max_input_chars = 6000
+max_output_tokens = 1400
+`
+
 func (d *Duration) UnmarshalText(text []byte) error {
 	raw := strings.TrimSpace(string(text))
 	if raw == "" {
@@ -93,6 +171,26 @@ func (d *Duration) UnmarshalText(text []byte) error {
 	}
 	d.Duration = parsed
 	return nil
+}
+
+func EnsureFile(path string) (bool, error) {
+	if ext := strings.ToLower(filepath.Ext(path)); ext != ".toml" {
+		return false, fmt.Errorf("unsupported config format %q: only .toml is supported", ext)
+	}
+
+	if _, err := os.Stat(path); err == nil {
+		return false, nil
+	} else if !os.IsNotExist(err) {
+		return false, err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(path, []byte(defaultConfigTOML), 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func Load(path string) (Config, error) {

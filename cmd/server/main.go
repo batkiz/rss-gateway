@@ -18,6 +18,14 @@ func main() {
 	configPath := flag.String("config", "configs/config.toml", "path to config file")
 	flag.Parse()
 
+	created, err := config.EnsureFile(*configPath)
+	if err != nil {
+		log.Fatalf("ensure config: %v", err)
+	}
+	if created {
+		log.Printf("config file missing, wrote default config path=%s", *configPath)
+	}
+
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("load config: %v", err)

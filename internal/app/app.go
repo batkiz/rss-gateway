@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -24,6 +25,13 @@ type App struct {
 }
 
 func New(cfg config.Config) (*App, error) {
+	if _, err := os.Stat(cfg.Storage.Path); err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("sqlite storage missing, initializing new database path=%s", cfg.Storage.Path)
+		} else {
+			return nil, fmt.Errorf("stat storage: %w", err)
+		}
+	}
 	log.Printf("opening sqlite storage path=%s", cfg.Storage.Path)
 	store, err := storage.NewSQLiteStore(cfg.Storage.Path)
 	if err != nil {
