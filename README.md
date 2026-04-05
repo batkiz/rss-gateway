@@ -44,111 +44,16 @@ Invoke-WebRequest -Method POST "http://localhost:8080/api/refresh?source=hackern
 Invoke-WebRequest -Method POST "http://localhost:8080/api/reprocess?source=hackernews-summary&limit=10"
 ```
 
-## 配置
+## 文档
 
-当前只支持 TOML 配置。
+- [配置指南](./docs/configuration.md)
+- [API 参考](./docs/api-reference.md)
+- [部署指南](./docs/deployment.md)
 
-页面现在可以直接编辑运行时配置：
+## 设计说明
 
-- LLM provider / model / API key / base URL / timeout
-- modes
-- sources
-
-这些数据会保存到 SQLite，并在保存后立即生效。  
-TOML 仍然保留，但主要用于首次启动时的初始化 seed；数据库里一旦已有运行时配置，后续启动不会再用 TOML 覆盖它们。
-
-`llm.base_url` 可用于接入 OpenAI 兼容网关。`api_key` 可以直接写在 TOML 里，也可以留空后在页面中填写：
-
-```toml
-[llm]
-provider = "openai"
-model = "gpt-4.1-mini"
-api_key = ""
-base_url = "https://api.openai.com/v1"
-```
-
-## Mode 配置
-
-mode 仍然支持通过 TOML 做初始定义，启动首次 seed 后也可以直接在页面中编辑。先定义 mode，再让 source 引用：
-
-```toml
-[modes.summary]
-system_prompt = "..."
-temperature = 0.2
-max_output_tokens = 900
-task_prompt = """
-1. Keep or lightly rewrite the title for clarity.
-2. Write a short summary in 3 to 5 sentences.
-3. Produce concise output content suitable for an RSS reader.
-"""
-
-[modes.summary.output_schema]
-name = "summary"
-title_field = "title"
-summary_field = "summary"
-content_field = "content"
-
-[[sources]]
-id = "hackernews-summary"
-url = "https://news.ycombinator.com/rss"
-
-[sources.pipeline]
-mode = "summary"
-```
-
-source 级别的 `pipeline.system_prompt`、`pipeline.task_prompt` 可以覆盖 mode 默认值。  
-`pipeline.temperature`、`pipeline.max_output_tokens`、`pipeline.extract_full_content` 也可以逐 source 覆盖。
-
-## 管理接口
-
-- `GET /`：仪表盘页面，支持 `?lang=zh|en`
-- `GET /settings/llm`：LLM 设置页面
-- `GET /modes`：mode 管理页面
-- `GET /sources`：source 管理页面
-- `GET /items?source=<id>&guid=<guid>`：单条 item 页面，可查看完整内容、预览 prompt、单条重跑
-- `POST /api/settings/llm`：保存运行时 LLM 配置
-- `POST /api/settings/mode`：保存 mode
-- `POST /api/settings/source`：保存 source
-- `GET /api/status`：按 source 查看刷新状态和条目计数
-- `POST /api/refresh?source=<id>`：拉取并处理最新 feed
-- `POST /api/reprocess?source=<id>&limit=<n>`：基于原始条目重新跑 LLM
-- `GET /api/raw-items?source=<id>&limit=<n>`：查看最近保存的原始条目
-- `GET /api/sources`：返回 source JSON 列表
-
-## 部署
-
-支持 Docker：
-
-```powershell
-docker build -t rss-gateway .
-docker run --rm -p 8080:8080 -v ${PWD}/configs/config.toml:/app/configs/config.toml:ro -v ${PWD}/data:/app/data rss-gateway
-```
-
-也可以直接使用仓库里的 `docker-compose.yml` 从 GHCR 拉取镜像：
-
-```powershell
-docker compose up -d
-```
-
-## CI 与 Release
-
-GitHub Actions 当前包含两类流程：
-
-- `ci`：运行 `go test ./...`、`go build ./...`，并构建 `linux/amd64` 与 `linux/arm64` Docker 镜像
-- `release`：发布 GitHub Release 时，构建 `linux`、`darwin`、`windows` 的 `amd64` / `arm64` 二进制并上传为 release asset
-- `tag-release`：手动输入版本号，创建 `vX.Y.Z` tag，并使用 GitHub 自动生成 release notes 作为 changelog
-
-容器镜像会发布到：
-
-```text
-ghcr.io/batkiz/rss-gateway
-```
-
-## 说明
-
-- OpenAI provider 当前使用 `/chat/completions`，并通过 `response_format` 应用 JSON Schema。
-- 原始条目会先落库，再根据输入内容变化决定是否重新处理。
-- 单条 item 页面支持临时覆盖 mode / prompt / temperature / token 参数做预览，确认后可只重跑并保存这一条。
-- 链接页正文提取现在会做更激进的清洗、候选区域评分和回退，优先选择更像正文的区块。
-- HTTP 服务会优先启动，首次 refresh 在后台异步执行。
-- 如果 source 引用了未定义的 mode，且又没有提供内联 prompt 覆盖，启动会失败。
+- 默认配置文件是 `configs/config.toml`
+- 运行时配置保存在 SQLite，Web 页面可直接编辑
+- HTTP 服务优先启动，首次 refresh 在后台异步执行
+- OpenAI provider 当前使用 `/chat/completions`
+- 输出 RSS 入口是 `/feeds/{sourceID}.rss`
