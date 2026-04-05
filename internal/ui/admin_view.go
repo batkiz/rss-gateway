@@ -14,9 +14,17 @@ import (
 	"github.com/batkiz/rss-gateway/internal/model"
 )
 
+const (
+	AdminSectionDashboard = "dashboard"
+	AdminSectionLLM       = "llm"
+	AdminSectionModes     = "modes"
+	AdminSectionSources   = "sources"
+)
+
 type AdminPageView struct {
 	Lang           string
 	Text           AdminText
+	Section        string
 	Message        string
 	Error          string
 	GeneratedAt    time.Time
@@ -29,6 +37,13 @@ type AdminPageView struct {
 	LLMSettings    AdminLLMSettingsView
 	SourceForm     AdminSourceForm
 	ModeForm       AdminModeForm
+	NavItems       []AdminNavItem
+}
+
+type AdminNavItem struct {
+	Label  string
+	Href   string
+	Active bool
 }
 
 type AdminText struct {
@@ -106,6 +121,8 @@ type AdminText struct {
 	SelectSource       string
 	NewSource          string
 	Language           string
+	Dashboard          string
+	LLMSettingsTitle   string
 }
 
 type AdminLLMSettingsView struct {
@@ -175,7 +192,7 @@ type AdminModeForm struct {
 	ExtraFieldsJSON string
 }
 
-func BuildAdminPageView(r *http.Request, settings model.LLMSettings, sources []model.Source, modes []model.Mode, states []model.FeedState, rawItems []model.RawItem, processedItems []model.ProcessedItem, selectedSource, selectedMode, message, errText string) AdminPageView {
+func BuildAdminPageView(r *http.Request, section string, settings model.LLMSettings, sources []model.Source, modes []model.Mode, states []model.FeedState, rawItems []model.RawItem, processedItems []model.ProcessedItem, selectedSource, selectedMode, message, errText string) AdminPageView {
 	lang := detectLanguage(r)
 	text := textsFor(lang)
 
@@ -237,6 +254,7 @@ func BuildAdminPageView(r *http.Request, settings model.LLMSettings, sources []m
 	return AdminPageView{
 		Lang:           lang,
 		Text:           text,
+		Section:        normalizeSection(section),
 		Message:        message,
 		Error:          errText,
 		GeneratedAt:    time.Now(),
@@ -255,6 +273,7 @@ func BuildAdminPageView(r *http.Request, settings model.LLMSettings, sources []m
 		},
 		SourceForm: buildSourceForm(sources, selectedSource),
 		ModeForm:   buildModeForm(modes, selectedMode),
+		NavItems:   buildNavItems(r, text, selectedSource, selectedMode, normalizeSection(section)),
 	}
 }
 
@@ -306,6 +325,14 @@ func selectedSourceStats(vm AdminPageView) string {
 		}
 	}
 	return ""
+}
+
+func navLinkClass(active bool) string {
+	base := "rounded-full border px-3 py-1.5 text-sm"
+	if active {
+		return base + " border-primary/30 bg-primary/10 text-primary"
+	}
+	return base + " border-border bg-background/80 text-muted-foreground"
 }
 
 func langLinkClass(active bool) string {
@@ -375,7 +402,7 @@ func textsFor(lang string) AdminText {
 		return AdminText{
 			PageTitle:          "rss-gateway 管理页",
 			ControlPlane:       "控制台",
-			Subtitle:           "一个保持简单的管理页面，用于查看 feed 状态、编辑运行时配置、手动刷新、重处理，以及检查输出。",
+			Subtitle:           "把状态查看、手动处理和运行时配置分开，避免一个页面塞下所有内容。",
 			GeneratedAt:        "生成时间",
 			Sources:            "订阅源",
 			SelectedFeed:       "当前订阅",
@@ -447,13 +474,15 @@ func textsFor(lang string) AdminText {
 			SelectSource:       "选择 Source",
 			NewSource:          "新建 Source",
 			Language:           "语言",
+			Dashboard:          "仪表盘",
+			LLMSettingsTitle:   "LLM 设置",
 		}
 	}
 
 	return AdminText{
 		PageTitle:          "rss-gateway admin",
 		ControlPlane:       "Control Plane",
-		Subtitle:           "A simple admin surface for feed status, runtime config editing, manual refresh, reprocessing, and output inspection.",
+		Subtitle:           "Split status, actions, and runtime config into separate pages so the admin UI stays readable.",
 		GeneratedAt:        "Generated",
 		Sources:            "Sources",
 		SelectedFeed:       "Selected Feed",
@@ -525,6 +554,8 @@ func textsFor(lang string) AdminText {
 		SelectSource:       "Select Source",
 		NewSource:          "New Source",
 		Language:           "Language",
+		Dashboard:          "Dashboard",
+		LLMSettingsTitle:   "LLM Settings",
 	}
 }
 
@@ -612,4 +643,52 @@ func maskAPIKey(value string) string {
 		return "******"
 	}
 	return value[:4] + "..." + value[len(value)-4:]
+}
+
+func buildNavItems(r *http.Request, text AdminText, selectedSource, selectedMode, section string) []AdminNavItem {
+	return []AdminNavItem{
+		{Label: text.Dashboard, Href: adminURL("/admin", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionDashboard},
+		{Label: text.LLMSettingsTitle, Href: adminURL("/admin/settings/llm", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionLLM},
+		{Label: text.ModesTitle, Href: adminURL("/admin/modes", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionModes},
+		{Label: text.SourcesTitle, Href: adminURL("/admin/sources", selectedSource, selectedMode, detectLanguage(r)), Active: section == AdminSectionSources},
+	}
+}
+
+func navPath(vm AdminPageView) string {
+	switch vm.Section {
+	case AdminSectionLLM:
+		return "/admin/settings/llm"
+	case AdminSectionModes:
+		return "/admin/modes"
+	case AdminSectionSources:
+		return "/admin/sources"
+	default:
+		return "/admin"
+	}
+}
+
+func adminURL(path, selectedSource, selectedMode, lang string) string {
+	values := url.Values{}
+	if selectedSource != "" {
+		values.Set("source", selectedSource)
+	}
+	if selectedMode != "" {
+		values.Set("mode", selectedMode)
+	}
+	if lang != "" {
+		values.Set("lang", lang)
+	}
+	if encoded := values.Encode(); encoded != "" {
+		return path + "?" + encoded
+	}
+	return path
+}
+
+func normalizeSection(section string) string {
+	switch section {
+	case AdminSectionLLM, AdminSectionModes, AdminSectionSources:
+		return section
+	default:
+		return AdminSectionDashboard
+	}
 }

@@ -37,10 +37,13 @@ func (h *Handler) Router() *chi.Mux {
 	r.Use(requestLogger)
 
 	r.Get("/healthz", h.handleHealth)
-	r.Get("/admin", h.handleAdminPage)
+	r.Get("/admin", h.handleDashboardPage)
 	r.Post("/admin", h.handleAdminAction)
+	r.Get("/admin/settings/llm", h.handleLLMPage)
 	r.Post("/admin/settings/llm", h.handleSaveLLMSettings)
+	r.Get("/admin/modes", h.handleModesPage)
 	r.Post("/admin/settings/mode", h.handleSaveMode)
+	r.Get("/admin/sources", h.handleSourcesPage)
 	r.Post("/admin/settings/source", h.handleSaveSource)
 	r.Get("/admin/status", h.handleStatus)
 	r.Post("/admin/refresh", h.handleRefresh)
@@ -64,8 +67,20 @@ func (h *Handler) handleSources(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sources)
 }
 
-func (h *Handler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
-	h.renderAdminPage(w, r, r.URL.Query().Get("message"), r.URL.Query().Get("error"))
+func (h *Handler) handleDashboardPage(w http.ResponseWriter, r *http.Request) {
+	h.renderAdminPage(w, r, ui.AdminSectionDashboard, r.URL.Query().Get("message"), r.URL.Query().Get("error"))
+}
+
+func (h *Handler) handleLLMPage(w http.ResponseWriter, r *http.Request) {
+	h.renderAdminPage(w, r, ui.AdminSectionLLM, r.URL.Query().Get("message"), r.URL.Query().Get("error"))
+}
+
+func (h *Handler) handleModesPage(w http.ResponseWriter, r *http.Request) {
+	h.renderAdminPage(w, r, ui.AdminSectionModes, r.URL.Query().Get("message"), r.URL.Query().Get("error"))
+}
+
+func (h *Handler) handleSourcesPage(w http.ResponseWriter, r *http.Request) {
+	h.renderAdminPage(w, r, ui.AdminSectionSources, r.URL.Query().Get("message"), r.URL.Query().Get("error"))
 }
 
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +94,7 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleAdminAction(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
+		h.redirectAdmin(w, r, "/admin", r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
 		return
 	}
 
@@ -111,20 +126,20 @@ func (h *Handler) handleAdminAction(w http.ResponseWriter, r *http.Request) {
 			message = "reprocessed source " + sourceID
 		}
 	default:
-		h.redirectAdmin(w, r, sourceID, modeName, lang, "", "unknown admin action")
+		h.redirectAdmin(w, r, "/admin", sourceID, modeName, lang, "", "unknown admin action")
 		return
 	}
 
 	if err != nil {
-		h.redirectAdmin(w, r, sourceID, modeName, lang, "", err.Error())
+		h.redirectAdmin(w, r, "/admin", sourceID, modeName, lang, "", err.Error())
 		return
 	}
-	h.redirectAdmin(w, r, sourceID, modeName, lang, message, "")
+	h.redirectAdmin(w, r, "/admin", sourceID, modeName, lang, message, "")
 }
 
 func (h *Handler) handleSaveLLMSettings(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
+		h.redirectAdmin(w, r, "/admin/settings/llm", r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
@@ -132,7 +147,7 @@ func (h *Handler) handleSaveLLMSettings(w http.ResponseWriter, r *http.Request) 
 
 	current, err := h.service.GetLLMSettings(ctx)
 	if err != nil {
-		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
+		h.redirectAdmin(w, r, "/admin/settings/llm", r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
 		return
 	}
 	apiKey := strings.TrimSpace(r.FormValue("api_key"))
@@ -148,15 +163,15 @@ func (h *Handler) handleSaveLLMSettings(w http.ResponseWriter, r *http.Request) 
 		Timeout:  r.FormValue("timeout"),
 	})
 	if err != nil {
-		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
+		h.redirectAdmin(w, r, "/admin/settings/llm", r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
 		return
 	}
-	h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "saved llm settings", "")
+	h.redirectAdmin(w, r, "/admin/settings/llm", r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "saved llm settings", "")
 }
 
 func (h *Handler) handleSaveMode(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", "invalid form data")
+		h.redirectAdmin(w, r, "/admin/modes", r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", "invalid form data")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
@@ -164,12 +179,12 @@ func (h *Handler) handleSaveMode(w http.ResponseWriter, r *http.Request) {
 
 	extras, err := parseExtraFieldsJSON(r.FormValue("extra_fields_json"))
 	if err != nil {
-		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", err.Error())
+		h.redirectAdmin(w, r, "/admin/modes", r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", err.Error())
 		return
 	}
 	temperature, err := parseOptionalFloat(r.FormValue("temperature"))
 	if err != nil {
-		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", err.Error())
+		h.redirectAdmin(w, r, "/admin/modes", r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", err.Error())
 		return
 	}
 	mode := model.Mode{
@@ -191,15 +206,15 @@ func (h *Handler) handleSaveMode(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	if err := h.service.SaveMode(ctx, mode); err != nil {
-		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", err.Error())
+		h.redirectAdmin(w, r, "/admin/modes", r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", err.Error())
 		return
 	}
-	h.redirectAdmin(w, r, r.FormValue("source"), mode.Name, r.FormValue("lang"), "saved mode "+mode.Name, "")
+	h.redirectAdmin(w, r, "/admin/modes", r.FormValue("source"), mode.Name, r.FormValue("lang"), "saved mode "+mode.Name, "")
 }
 
 func (h *Handler) handleSaveSource(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.redirectAdmin(w, r, r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
+		h.redirectAdmin(w, r, "/admin/sources", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
@@ -207,12 +222,12 @@ func (h *Handler) handleSaveSource(w http.ResponseWriter, r *http.Request) {
 
 	refreshInterval, err := time.ParseDuration(strings.TrimSpace(r.FormValue("refresh_interval")))
 	if err != nil {
-		h.redirectAdmin(w, r, r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid refresh interval")
+		h.redirectAdmin(w, r, "/admin/sources", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid refresh interval")
 		return
 	}
 	temperature, err := parseOptionalFloat(r.FormValue("temperature"))
 	if err != nil {
-		h.redirectAdmin(w, r, r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
+		h.redirectAdmin(w, r, "/admin/sources", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
 		return
 	}
 
@@ -232,10 +247,10 @@ func (h *Handler) handleSaveSource(w http.ResponseWriter, r *http.Request) {
 		MaxOutputTokens: positiveInt(r.FormValue("max_output_tokens"), 0),
 	}
 	if err := h.service.SaveSource(ctx, source); err != nil {
-		h.redirectAdmin(w, r, r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
+		h.redirectAdmin(w, r, "/admin/sources", r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
 		return
 	}
-	h.redirectAdmin(w, r, source.ID, r.FormValue("mode"), r.FormValue("lang"), "saved source "+source.ID, "")
+	h.redirectAdmin(w, r, "/admin/sources", source.ID, r.FormValue("mode"), r.FormValue("lang"), "saved source "+source.ID, "")
 }
 
 func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
@@ -330,7 +345,7 @@ func (h *Handler) handleFeed(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-func (h *Handler) renderAdminPage(w http.ResponseWriter, r *http.Request, message, errText string) {
+func (h *Handler) renderAdminPage(w http.ResponseWriter, r *http.Request, section, message, errText string) {
 	selectedSource := r.URL.Query().Get("source")
 	selectedMode := r.URL.Query().Get("mode")
 
@@ -375,11 +390,11 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, r *http.Request, messag
 		}
 	}
 
-	vm := ui.BuildAdminPageView(r, settings, sources, modes, status, rawItems, processedItems, selectedSource, selectedMode, message, errText)
+	vm := ui.BuildAdminPageView(r, section, settings, sources, modes, status, rawItems, processedItems, selectedSource, selectedMode, message, errText)
 	templ.Handler(ui.AdminPage(vm)).ServeHTTP(w, r)
 }
 
-func (h *Handler) redirectAdmin(w http.ResponseWriter, r *http.Request, sourceID, modeName, lang, message, errText string) {
+func (h *Handler) redirectAdmin(w http.ResponseWriter, r *http.Request, path, sourceID, modeName, lang, message, errText string) {
 	values := r.URL.Query()
 	if sourceID != "" {
 		values.Set("source", sourceID)
@@ -396,7 +411,11 @@ func (h *Handler) redirectAdmin(w http.ResponseWriter, r *http.Request, sourceID
 	if errText != "" {
 		values.Set("error", errText)
 	}
-	http.Redirect(w, r, "/admin?"+values.Encode(), http.StatusSeeOther)
+	target := path
+	if encoded := values.Encode(); encoded != "" {
+		target += "?" + encoded
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
