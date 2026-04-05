@@ -61,221 +61,457 @@ templ AdminPage(vm AdminPageView) {
 						radial-gradient(circle at bottom right, rgba(166, 196, 106, 0.18), transparent 24%),
 						linear-gradient(180deg, rgba(255,255,255,0.92), rgba(248,250,245,0.98));
 				}
+				label {
+					@apply text-sm font-medium;
+				}
+				input, select, textarea {
+					@apply w-full rounded-md border border-input bg-background px-3 py-2 text-sm;
+				}
 			</style>
 		</head>
 		<body class="min-h-screen bg-background text-foreground">
 			<div class="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
 				<div class="flex items-center justify-end gap-2 text-sm">
-					<a href={ "/admin?source=" + vm.SelectedSource + "&lang=en" } class={ langLinkClass(vm.Lang == "en") }>English</a>
-					<a href={ "/admin?source=" + vm.SelectedSource + "&lang=zh" } class={ langLinkClass(vm.Lang == "zh") }>中文</a>
-				</div>
-				<div class="grid gap-6 lg:grid-cols-[1.4fr_0.8fr]">
-					@card.Card(card.Props{Class: "border-border/70 bg-card/95 backdrop-blur"}) {
-						@card.Header(card.HeaderProps{Class: "gap-3"}) {
-							<div class="flex items-center justify-between gap-4">
-								<div>
-									<div class="text-xs uppercase tracking-[0.24em] text-muted-foreground">{ vm.Text.ControlPlane }</div>
-									@card.Title() {
-										<div class="text-3xl font-semibold tracking-tight">rss-gateway</div>
-									}
-									@card.Description() {
-										<div class="max-w-2xl text-sm text-muted-foreground">{ vm.Text.Subtitle }</div>
-									}
-								</div>
-								@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "text-xs"}) {
-									{ vm.Text.GeneratedAt } { vm.GeneratedAt.Format("15:04:05") }
-								}
-							</div>
-						}
-						@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-5 sm:grid-cols-3"}) {
-							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
-								<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.Sources }</div>
-								<div class="mt-2 text-3xl font-semibold">{ fmt.Sprintf("%d", len(vm.Sources)) }</div>
-							</div>
-							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
-								<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.SelectedFeed }</div>
-								<div class="mt-2 text-lg font-semibold">{ selectedSourceTitle(vm) }</div>
-								<div class="mt-1 text-sm text-muted-foreground">{ selectedSourceMode(vm) }</div>
-							</div>
-							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
-								<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.StoredItems }</div>
-								<div class="mt-2 text-lg font-semibold">{ selectedSourceStats(vm) }</div>
-								<div class="mt-1 text-sm text-muted-foreground">{ vm.Text.RawProcessed }</div>
-							</div>
-						}
-					}
-					@card.Card(card.Props{Class: "border-border/70 bg-card/95 backdrop-blur"}) {
-						@card.Header(card.HeaderProps{Class: "gap-2"}) {
-							@card.Title() {
-								<div class="text-xl font-semibold">{ vm.Text.QuickActions }</div>
-							}
-							@card.Description() {
-								<div class="text-sm text-muted-foreground">{ vm.Text.ActionsHint }</div>
-							}
-						}
-						@card.Content(card.ContentProps{Class: "grid gap-3 p-6 pt-2"}) {
-							<form method="get" action="/admin" class="grid gap-2">
-								<input type="hidden" name="lang" value={ vm.Lang }/>
-								<label class="text-sm font-medium" for="source">{ vm.Text.Source }</label>
-								<select id="source" name="source" class="rounded-md border border-input bg-background px-3 py-2 text-sm">
-									for _, source := range vm.Sources {
-										if source.ID == vm.SelectedSource {
-											<option value={ source.ID } selected>{ source.Name }</option>
-										} else {
-											<option value={ source.ID }>{ source.Name }</option>
-										}
-									}
-								</select>
-								@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantSecondary, Class: "justify-start"}) {
-									{ vm.Text.OpenSourceView }
-								}
-							</form>
-							<form method="post" action="/admin" class="grid gap-2">
-								<input type="hidden" name="lang" value={ vm.Lang }/>
-								<input type="hidden" name="action" value="refresh"/>
-								<input type="hidden" name="source" value={ vm.SelectedSource }/>
-								@button.Button(button.Props{Type: button.TypeSubmit, Class: "justify-start"}) {
-									{ vm.Text.RefreshSelected }
-								}
-							</form>
-							<form method="post" action="/admin" class="grid gap-2">
-								<input type="hidden" name="lang" value={ vm.Lang }/>
-								<input type="hidden" name="action" value="reprocess"/>
-								<input type="hidden" name="source" value={ vm.SelectedSource }/>
-								<div class="flex gap-2">
-									<input type="number" name="limit" min="1" max="100" value="10" class="w-24 rounded-md border border-input bg-background px-3 py-2 text-sm"/>
-									@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline, Class: "justify-start"}) {
-										{ vm.Text.ReprocessRecent }
-									}
-								</div>
-							</form>
-							<form method="post" action="/admin" class="grid gap-2">
-								<input type="hidden" name="lang" value={ vm.Lang }/>
-								<input type="hidden" name="action" value="refresh_all"/>
-								@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantGhost, Class: "justify-start"}) {
-									{ vm.Text.RefreshAll }
-								}
-							</form>
-							if vm.Message != "" {
-								<div class="rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-foreground">{ vm.Message }</div>
-							}
-							if vm.Error != "" {
-								<div class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-foreground">{ vm.Error }</div>
-							}
-						}
-					}
+					<a href={ "/admin?source=" + vm.SelectedSource + "&mode=" + vm.SelectedMode + "&lang=en" } class={ langLinkClass(vm.Lang == "en") }>English</a>
+					<a href={ "/admin?source=" + vm.SelectedSource + "&mode=" + vm.SelectedMode + "&lang=zh" } class={ langLinkClass(vm.Lang == "zh") }>中文</a>
 				</div>
 
-				<div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-					@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
-						@card.Header() {
-							<div class="flex items-center justify-between gap-4">
-								<div>
-									@card.Title() {
-										<div class="text-xl font-semibold">{ vm.Text.SourceStatus }</div>
-									}
-									@card.Description() {
-										<div class="text-sm text-muted-foreground">{ vm.Text.StatusHint }</div>
-									}
-								</div>
-								<a href={ "/admin/status?lang=" + vm.Lang } class="text-sm text-primary underline-offset-4 hover:underline">{ vm.Text.JSON }</a>
-							</div>
-						}
-						@card.Content(card.ContentProps{Class: "overflow-x-auto p-6 pt-0"}) {
-							@table.Table(table.Props{}) {
-								@table.Header() {
-									@table.Row() {
-										@table.Head() { vm.Text.Source }
-										@table.Head() { vm.Text.Mode }
-										@table.Head() { vm.Text.State }
-										@table.Head() { vm.Text.LastSuccess }
-										@table.Head() { vm.Text.Counts }
-										@table.Head() { vm.Text.Feed }
-									}
+				@card.Card(card.Props{Class: "border-border/70 bg-card/95 backdrop-blur"}) {
+					@card.Header(card.HeaderProps{Class: "gap-3"}) {
+						<div class="flex items-center justify-between gap-4">
+							<div>
+								<div class="text-xs uppercase tracking-[0.24em] text-muted-foreground">{ vm.Text.ControlPlane }</div>
+								@card.Title() {
+									<div class="text-3xl font-semibold tracking-tight">rss-gateway</div>
 								}
-								@table.Body() {
-									for _, source := range vm.Sources {
-										@table.Row(table.RowProps{Selected: source.ID == vm.SelectedSource}) {
-											@table.Cell(table.CellProps{Class: "align-top"}) {
-												<div class="flex flex-col gap-1">
-													<a href={ "/admin?source=" + source.ID + "&lang=" + vm.Lang } class="font-medium underline-offset-4 hover:underline">{ source.Name }</a>
-													<div class="text-xs text-muted-foreground">{ source.ID }</div>
-													<a href={ source.URL } class="max-w-[18rem] truncate text-xs text-muted-foreground underline-offset-4 hover:underline">{ source.URL }</a>
-												</div>
+								@card.Description() {
+									<div class="max-w-3xl text-sm text-muted-foreground">{ vm.Text.Subtitle }</div>
+								}
+							</div>
+							@badge.Badge(badge.Props{Variant: badge.VariantOutline, Class: "text-xs"}) {
+								{ vm.Text.GeneratedAt } { vm.GeneratedAt.Format("15:04:05") }
+							}
+						</div>
+					}
+					@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-5 sm:grid-cols-3"}) {
+						<div class="rounded-xl border border-border/80 bg-background/70 p-4">
+							<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.Sources }</div>
+							<div class="mt-2 text-3xl font-semibold">{ fmt.Sprintf("%d", len(vm.Sources)) }</div>
+						</div>
+						<div class="rounded-xl border border-border/80 bg-background/70 p-4">
+							<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.SelectedFeed }</div>
+							<div class="mt-2 text-lg font-semibold">{ selectedSourceTitle(vm) }</div>
+							<div class="mt-1 text-sm text-muted-foreground">{ selectedSourceMode(vm) }</div>
+						</div>
+						<div class="rounded-xl border border-border/80 bg-background/70 p-4">
+							<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.StoredItems }</div>
+							<div class="mt-2 text-lg font-semibold">{ selectedSourceStats(vm) }</div>
+							<div class="mt-1 text-sm text-muted-foreground">{ vm.Text.RawProcessed }</div>
+						</div>
+					}
+				}
+
+				if vm.Message != "" {
+					<div class="rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-foreground">{ vm.Message }</div>
+				}
+				if vm.Error != "" {
+					<div class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-foreground">{ vm.Error }</div>
+				}
+
+				<div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+					<div class="grid gap-6">
+						@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
+							@card.Header() {
+								@card.Title() {
+									<div class="text-xl font-semibold">{ vm.Text.RuntimeSettings }</div>
+								}
+								@card.Description() {
+									<div class="text-sm text-muted-foreground">{ vm.Text.SettingsHint }</div>
+								}
+							}
+							@card.Content(card.ContentProps{Class: "grid gap-3 p-6 pt-0"}) {
+								<form method="post" action="/admin/settings/llm" class="grid gap-3">
+									<input type="hidden" name="lang" value={ vm.Lang }/>
+									<input type="hidden" name="source" value={ vm.SelectedSource }/>
+									<input type="hidden" name="mode" value={ vm.SelectedMode }/>
+									<div class="grid gap-3 md:grid-cols-2">
+										<div class="grid gap-2">
+											<label for="llm-provider">{ vm.Text.Provider }</label>
+											<input id="llm-provider" name="provider" value={ vm.LLMSettings.Provider }/>
+										</div>
+										<div class="grid gap-2">
+											<label for="llm-model">{ vm.Text.Model }</label>
+											<input id="llm-model" name="model" value={ vm.LLMSettings.Model }/>
+										</div>
+										<div class="grid gap-2 md:col-span-2">
+											<label for="llm-api-key">{ vm.Text.APIKey }</label>
+											<input id="llm-api-key" name="api_key" type="password" placeholder={ vm.LLMSettings.APIKeyMasked }/>
+											if vm.LLMSettings.APIKeyMasked != "" {
+												<div class="text-xs text-muted-foreground">{ vm.Text.CurrentKey }: { vm.LLMSettings.APIKeyMasked }</div>
 											}
-											@table.Cell(table.CellProps{Class: "align-top"}) {
-												<div class="flex flex-col gap-2">
-													@badge.Badge(badge.Props{Variant: badge.VariantOutline}) { source.Mode }
-													if source.Enabled {
-														@badge.Badge(badge.Props{Variant: badgeVariant(true)}) { vm.Text.Enabled }
-													} else {
-														@badge.Badge(badge.Props{Variant: badgeVariant(false)}) { vm.Text.Disabled }
-													}
-												</div>
-											}
-											@table.Cell(table.CellProps{Class: "align-top"}) {
-												if source.LastError != "" {
-													<div class="flex flex-col gap-2">
-														@badge.Badge(badge.Props{Variant: errorBadgeVariant(true)}) { vm.Text.Error }
-														<div class="max-w-[16rem] text-xs text-muted-foreground">{ shorten(source.LastError, 140) }</div>
+										</div>
+										<div class="grid gap-2">
+											<label for="llm-base-url">{ vm.Text.BaseURL }</label>
+											<input id="llm-base-url" name="base_url" value={ vm.LLMSettings.BaseURL }/>
+										</div>
+										<div class="grid gap-2">
+											<label for="llm-timeout">{ vm.Text.Timeout }</label>
+											<input id="llm-timeout" name="timeout" value={ vm.LLMSettings.Timeout }/>
+										</div>
+									</div>
+									@button.Button(button.Props{Type: button.TypeSubmit, Class: "justify-start"}) {
+										{ vm.Text.SaveSettings }
+									}
+								</form>
+							}
+						}
+
+						@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
+							@card.Header() {
+								<div class="flex items-center justify-between gap-4">
+									<div>
+										@card.Title() {
+											<div class="text-xl font-semibold">{ vm.Text.SourceStatus }</div>
+										}
+										@card.Description() {
+											<div class="text-sm text-muted-foreground">{ vm.Text.StatusHint }</div>
+										}
+									</div>
+									<a href={ "/admin/status?lang=" + vm.Lang } class="text-sm text-primary underline-offset-4 hover:underline">{ vm.Text.JSON }</a>
+								</div>
+							}
+							@card.Content(card.ContentProps{Class: "overflow-x-auto p-6 pt-0"}) {
+								@table.Table(table.Props{}) {
+									@table.Header() {
+										@table.Row() {
+											@table.Head() { vm.Text.Source }
+											@table.Head() { vm.Text.Mode }
+											@table.Head() { vm.Text.State }
+											@table.Head() { vm.Text.LastSuccess }
+											@table.Head() { vm.Text.Counts }
+											@table.Head() { vm.Text.Feed }
+										}
+									}
+									@table.Body() {
+										for _, source := range vm.Sources {
+											@table.Row(table.RowProps{Selected: source.ID == vm.SelectedSource}) {
+												@table.Cell(table.CellProps{Class: "align-top"}) {
+													<div class="flex flex-col gap-1">
+														<a href={ "/admin?source=" + source.ID + "&mode=" + vm.SelectedMode + "&lang=" + vm.Lang } class="font-medium underline-offset-4 hover:underline">{ source.Name }</a>
+														<div class="text-xs text-muted-foreground">{ source.ID }</div>
 													</div>
-												} else {
-													@badge.Badge(badge.Props{Variant: errorBadgeVariant(false)}) { vm.Text.Healthy }
 												}
-											}
-											@table.Cell(table.CellProps{Class: "align-top text-sm text-muted-foreground"}) {
-												{ source.LastSuccessLabel }
-											}
-											@table.Cell(table.CellProps{Class: "align-top"}) {
-												<div class="text-sm">
-													<div>{ fmt.Sprintf("%d %s", source.LastFetchedCount, vm.Text.Fetched) }</div>
-													<div>{ fmt.Sprintf("%d %s", source.LastProcessedCount, vm.Text.Processed) }</div>
-													<div>{ fmt.Sprintf("%d / %d", source.RawItemCount, source.ProcessedItemCount) }</div>
-												</div>
-											}
-											@table.Cell(table.CellProps{Class: "align-top"}) {
-												<a href={ source.FeedURL } class="text-sm text-primary underline-offset-4 hover:underline">{ vm.Text.OpenFeed }</a>
+												@table.Cell(table.CellProps{Class: "align-top"}) {
+													<div class="flex flex-col gap-2">
+														@badge.Badge(badge.Props{Variant: badge.VariantOutline}) { source.Mode }
+														if source.Enabled {
+															@badge.Badge(badge.Props{Variant: badgeVariant(true)}) { vm.Text.Enabled }
+														} else {
+															@badge.Badge(badge.Props{Variant: badgeVariant(false)}) { vm.Text.Disabled }
+														}
+													</div>
+												}
+												@table.Cell(table.CellProps{Class: "align-top"}) {
+													if source.LastError != "" {
+														<div class="flex flex-col gap-2">
+															@badge.Badge(badge.Props{Variant: errorBadgeVariant(true)}) { vm.Text.Error }
+															<div class="max-w-[16rem] text-xs text-muted-foreground">{ shorten(source.LastError, 140) }</div>
+														</div>
+													} else {
+														@badge.Badge(badge.Props{Variant: errorBadgeVariant(false)}) { vm.Text.Healthy }
+													}
+												}
+												@table.Cell(table.CellProps{Class: "align-top text-sm text-muted-foreground"}) {
+													{ source.LastSuccessLabel }
+												}
+												@table.Cell(table.CellProps{Class: "align-top"}) {
+													<div class="text-sm">
+														<div>{ fmt.Sprintf("%d %s", source.LastFetchedCount, vm.Text.Fetched) }</div>
+														<div>{ fmt.Sprintf("%d %s", source.LastProcessedCount, vm.Text.Processed) }</div>
+														<div>{ fmt.Sprintf("%d / %d", source.RawItemCount, source.ProcessedItemCount) }</div>
+													</div>
+												}
+												@table.Cell(table.CellProps{Class: "align-top"}) {
+													<a href={ source.FeedURL } class="text-sm text-primary underline-offset-4 hover:underline">{ vm.Text.OpenFeed }</a>
+												}
 											}
 										}
 									}
 								}
 							}
 						}
-					}
+
+						<div class="grid gap-6 lg:grid-cols-2">
+							@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
+								@card.Header() {
+									@card.Title() {
+										<div class="text-xl font-semibold">{ vm.Text.ModesTitle }</div>
+									}
+									@card.Description() {
+										<div class="text-sm text-muted-foreground">{ vm.Text.ModesHint }</div>
+									}
+								}
+								@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-0"}) {
+									<form method="get" action="/admin" class="grid gap-2">
+										<input type="hidden" name="lang" value={ vm.Lang }/>
+										<input type="hidden" name="source" value={ vm.SelectedSource }/>
+										<label for="mode-select">{ vm.Text.SelectMode }</label>
+										<select id="mode-select" name="mode">
+											for _, mode := range vm.Modes {
+												if mode.Name == vm.SelectedMode {
+													<option value={ mode.Name } selected>{ mode.Name }</option>
+												} else {
+													<option value={ mode.Name }>{ mode.Name }</option>
+												}
+											}
+										</select>
+										@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantSecondary, Class: "justify-start"}) {
+											{ vm.Text.OpenSourceView }
+										}
+									</form>
+									<a href={ "/admin?source=" + vm.SelectedSource + "&mode=&lang=" + vm.Lang } class="text-sm text-primary underline-offset-4 hover:underline">{ vm.Text.NewMode }</a>
+									<form method="post" action="/admin/settings/mode" class="grid gap-3">
+										<input type="hidden" name="lang" value={ vm.Lang }/>
+										<input type="hidden" name="source" value={ vm.SelectedSource }/>
+										<input type="hidden" name="selected_mode" value={ vm.SelectedMode }/>
+										<div class="grid gap-2">
+											<label for="mode-name">{ vm.Text.Name }</label>
+											<input id="mode-name" name="name" value={ vm.ModeForm.Name }/>
+										</div>
+										<div class="grid gap-2">
+											<label for="mode-system-prompt">{ vm.Text.SystemPrompt }</label>
+											<textarea id="mode-system-prompt" name="system_prompt" rows="5">{ vm.ModeForm.SystemPrompt }</textarea>
+										</div>
+										<div class="grid gap-2">
+											<label for="mode-task-prompt">{ vm.Text.TaskPrompt }</label>
+											<textarea id="mode-task-prompt" name="task_prompt" rows="6">{ vm.ModeForm.TaskPrompt }</textarea>
+										</div>
+										<div class="grid gap-3 md:grid-cols-2">
+											<div class="grid gap-2">
+												<label for="mode-temperature">{ vm.Text.Temperature }</label>
+												<input id="mode-temperature" name="temperature" value={ vm.ModeForm.Temperature }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="mode-max-output-tokens">{ vm.Text.MaxOutputTokens }</label>
+												<input id="mode-max-output-tokens" name="max_output_tokens" type="number" min="0" value={ fmt.Sprintf("%d", vm.ModeForm.MaxOutputTokens) }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="mode-schema-name">{ vm.Text.SchemaName }</label>
+												<input id="mode-schema-name" name="schema_name" value={ vm.ModeForm.SchemaName }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="mode-title-field">{ vm.Text.TitleField }</label>
+												<input id="mode-title-field" name="title_field" value={ vm.ModeForm.TitleField }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="mode-summary-field">{ vm.Text.SummaryField }</label>
+												<input id="mode-summary-field" name="summary_field" value={ vm.ModeForm.SummaryField }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="mode-content-field">{ vm.Text.ContentField }</label>
+												<input id="mode-content-field" name="content_field" value={ vm.ModeForm.ContentField }/>
+											</div>
+										</div>
+										<div class="grid gap-2">
+											<label for="mode-extra-fields">{ vm.Text.ExtraFieldsJSON }</label>
+											<textarea id="mode-extra-fields" name="extra_fields_json" rows="8">{ vm.ModeForm.ExtraFieldsJSON }</textarea>
+										</div>
+										@button.Button(button.Props{Type: button.TypeSubmit, Class: "justify-start"}) {
+											{ vm.Text.SaveMode }
+										}
+									</form>
+								}
+							}
+
+							@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
+								@card.Header() {
+									@card.Title() {
+										<div class="text-xl font-semibold">{ vm.Text.SourcesTitle }</div>
+									}
+									@card.Description() {
+										<div class="text-sm text-muted-foreground">{ vm.Text.SourcesHint }</div>
+									}
+								}
+								@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-0"}) {
+									<form method="get" action="/admin" class="grid gap-2">
+										<input type="hidden" name="lang" value={ vm.Lang }/>
+										<input type="hidden" name="mode" value={ vm.SelectedMode }/>
+										<label for="source-select">{ vm.Text.SelectSource }</label>
+										<select id="source-select" name="source">
+											for _, source := range vm.Sources {
+												if source.ID == vm.SelectedSource {
+													<option value={ source.ID } selected>{ source.Name }</option>
+												} else {
+													<option value={ source.ID }>{ source.Name }</option>
+												}
+											}
+										</select>
+										@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantSecondary, Class: "justify-start"}) {
+											{ vm.Text.OpenSourceView }
+										}
+									</form>
+									<a href={ "/admin?source=&mode=" + vm.SelectedMode + "&lang=" + vm.Lang } class="text-sm text-primary underline-offset-4 hover:underline">{ vm.Text.NewSource }</a>
+									<form method="post" action="/admin/settings/source" class="grid gap-3">
+										<input type="hidden" name="lang" value={ vm.Lang }/>
+										<input type="hidden" name="mode" value={ vm.SelectedMode }/>
+										<input type="hidden" name="selected_source" value={ vm.SelectedSource }/>
+										<div class="grid gap-3 md:grid-cols-2">
+											<div class="grid gap-2">
+												<label for="source-id">{ vm.Text.Name } / ID</label>
+												<input id="source-id" name="id" value={ vm.SourceForm.ID }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="source-name">{ vm.Text.Name }</label>
+												<input id="source-name" name="name" value={ vm.SourceForm.Name }/>
+											</div>
+											<div class="grid gap-2 md:col-span-2">
+												<label for="source-url">{ vm.Text.URL }</label>
+												<input id="source-url" name="url" value={ vm.SourceForm.URL }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="source-refresh-interval">{ vm.Text.RefreshInterval }</label>
+												<input id="source-refresh-interval" name="refresh_interval" value={ vm.SourceForm.RefreshInterval }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="source-mode">{ vm.Text.Mode }</label>
+												<select id="source-mode" name="pipeline_mode">
+													for _, mode := range vm.Modes {
+														if mode.Name == vm.SourceForm.PipelineMode {
+															<option value={ mode.Name } selected>{ mode.Name }</option>
+														} else {
+															<option value={ mode.Name }>{ mode.Name }</option>
+														}
+													}
+												</select>
+											</div>
+											<div class="grid gap-2">
+												<label for="source-max-items">{ vm.Text.MaxItems }</label>
+												<input id="source-max-items" name="max_items" type="number" min="1" value={ fmt.Sprintf("%d", vm.SourceForm.MaxItems) }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="source-max-input-chars">{ vm.Text.MaxInputChars }</label>
+												<input id="source-max-input-chars" name="max_input_chars" type="number" min="1" value={ fmt.Sprintf("%d", vm.SourceForm.MaxInputChars) }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="source-temperature">{ vm.Text.Temperature }</label>
+												<input id="source-temperature" name="temperature" value={ vm.SourceForm.Temperature }/>
+											</div>
+											<div class="grid gap-2">
+												<label for="source-max-output-tokens">{ vm.Text.MaxOutputTokens }</label>
+												<input id="source-max-output-tokens" name="max_output_tokens" type="number" min="0" value={ fmt.Sprintf("%d", vm.SourceForm.MaxOutputTokens) }/>
+											</div>
+										</div>
+										<div class="grid gap-2">
+											<label for="source-system-prompt">{ vm.Text.SystemPrompt }</label>
+											<textarea id="source-system-prompt" name="system_prompt" rows="4">{ vm.SourceForm.SystemPrompt }</textarea>
+										</div>
+										<div class="grid gap-2">
+											<label for="source-task-prompt">{ vm.Text.TaskPrompt }</label>
+											<textarea id="source-task-prompt" name="task_prompt" rows="4">{ vm.SourceForm.TaskPrompt }</textarea>
+										</div>
+										<div class="flex flex-wrap gap-4 text-sm">
+											<label class="flex items-center gap-2">
+												if vm.SourceForm.Enabled {
+													<input type="checkbox" name="enabled" checked/>
+												} else {
+													<input type="checkbox" name="enabled"/>
+												}
+												<span>{ vm.Text.Enabled }</span>
+											</label>
+											<label class="flex items-center gap-2">
+												if vm.SourceForm.ExtractFull {
+													<input type="checkbox" name="extract_full_content" checked/>
+												} else {
+													<input type="checkbox" name="extract_full_content"/>
+												}
+												<span>{ vm.Text.ExtractFullContent }</span>
+											</label>
+										</div>
+										@button.Button(button.Props{Type: button.TypeSubmit, Class: "justify-start"}) {
+											{ vm.Text.SaveSource }
+										}
+									</form>
+								}
+							}
+						</div>
+					</div>
 
 					<div class="grid gap-6">
 						@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
-						@card.Header() {
-							@card.Title() {
-								<div class="text-xl font-semibold">{ vm.Text.SelectedSource }</div>
+							@card.Header() {
+								@card.Title() {
+									<div class="text-xl font-semibold">{ vm.Text.QuickActions }</div>
+								}
+								@card.Description() {
+									<div class="text-sm text-muted-foreground">{ vm.Text.ActionsHint }</div>
+								}
 							}
-							@card.Description() {
-								<div class="text-sm text-muted-foreground">{ vm.Text.RecentRawItems }</div>
+							@card.Content(card.ContentProps{Class: "grid gap-3 p-6 pt-0"}) {
+								<form method="post" action="/admin">
+									<input type="hidden" name="lang" value={ vm.Lang }/>
+									<input type="hidden" name="mode" value={ vm.SelectedMode }/>
+									<input type="hidden" name="action" value="refresh"/>
+									<input type="hidden" name="source" value={ vm.SelectedSource }/>
+									@button.Button(button.Props{Type: button.TypeSubmit, Class: "justify-start"}) {
+										{ vm.Text.RefreshSelected }
+									}
+								</form>
+								<form method="post" action="/admin" class="grid gap-2">
+									<input type="hidden" name="lang" value={ vm.Lang }/>
+									<input type="hidden" name="mode" value={ vm.SelectedMode }/>
+									<input type="hidden" name="action" value="reprocess"/>
+									<input type="hidden" name="source" value={ vm.SelectedSource }/>
+									<div class="flex gap-2">
+										<input type="number" name="limit" min="1" max="100" value="10" class="w-24"/>
+										@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline, Class: "justify-start"}) {
+											{ vm.Text.ReprocessRecent }
+										}
+									</div>
+								</form>
+								<form method="post" action="/admin">
+									<input type="hidden" name="lang" value={ vm.Lang }/>
+									<input type="hidden" name="mode" value={ vm.SelectedMode }/>
+									<input type="hidden" name="action" value="refresh_all"/>
+									@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantGhost, Class: "justify-start"}) {
+										{ vm.Text.RefreshAll }
+									}
+								</form>
 							}
 						}
-						@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-0"}) {
-							<div class="rounded-xl border border-border/80 bg-background/70 p-4">
-								<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.FeedOutput }</div>
-								<a href={ selectedSourceFeedURL(vm) } class="mt-2 block break-all text-sm text-primary underline-offset-4 hover:underline">{ selectedSourceFeedURL(vm) }</a>
-							</div>
-							if len(vm.RawItems) == 0 {
-								<div class="rounded-xl border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">{ vm.Text.NoRawItems }</div>
-							} else {
-								for _, item := range vm.RawItems {
-									<div class="rounded-xl border border-border/80 bg-background/60 p-4">
-										<div class="flex items-start justify-between gap-3">
-											<div class="font-medium">{ fallback(item.Title, item.GUID) }</div>
-											@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) {
-												{ item.PublishedAt.Format("01-02 15:04") }
-											}
+
+						@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
+							@card.Header() {
+								@card.Title() {
+									<div class="text-xl font-semibold">{ vm.Text.SelectedSource }</div>
+								}
+								@card.Description() {
+									<div class="text-sm text-muted-foreground">{ vm.Text.RecentRawItems }</div>
+								}
+							}
+							@card.Content(card.ContentProps{Class: "grid gap-4 p-6 pt-0"}) {
+								<div class="rounded-xl border border-border/80 bg-background/70 p-4">
+									<div class="text-xs uppercase tracking-wider text-muted-foreground">{ vm.Text.FeedOutput }</div>
+									<a href={ selectedSourceFeedURL(vm) } class="mt-2 block break-all text-sm text-primary underline-offset-4 hover:underline">{ selectedSourceFeedURL(vm) }</a>
+								</div>
+								if len(vm.RawItems) == 0 {
+									<div class="rounded-xl border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">{ vm.Text.NoRawItems }</div>
+								} else {
+									for _, item := range vm.RawItems {
+										<div class="rounded-xl border border-border/80 bg-background/60 p-4">
+											<div class="flex items-start justify-between gap-3">
+												<div class="font-medium">{ fallback(item.Title, item.GUID) }</div>
+												@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) {
+													{ item.PublishedAt.Format("01-02 15:04") }
+												}
+											</div>
+											<div class="mt-2 text-xs text-muted-foreground">{ shorten(item.Link, 80) }</div>
+											<div class="mt-3 text-sm leading-6 text-foreground/90">{ shorten(item.ContentText, 280) }</div>
 										</div>
-										<div class="mt-2 text-xs text-muted-foreground">{ shorten(item.Link, 80) }</div>
-										<div class="mt-3 text-sm leading-6 text-foreground/90">{ shorten(item.ContentText, 280) }</div>
-									</div>
+									}
 								}
 							}
 						}
-						}
+
 						@card.Card(card.Props{Class: "border-border/70 bg-card/95"}) {
 							@card.Header() {
 								@card.Title() {

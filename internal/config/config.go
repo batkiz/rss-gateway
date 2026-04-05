@@ -166,12 +166,6 @@ func (c *Config) validateAndResolve() error {
 	if c.LLM.APIKey == "" && c.LLM.APIKeyEnv != "" {
 		c.LLM.APIKey = os.Getenv(c.LLM.APIKeyEnv)
 	}
-	if c.LLM.Provider == "openai" && c.LLM.APIKey == "" {
-		return fmt.Errorf("llm api key is required")
-	}
-	if len(c.Sources) == 0 {
-		return fmt.Errorf("at least one source is required")
-	}
 	for _, source := range c.Sources {
 		if source.ID == "" {
 			return fmt.Errorf("source id is required")

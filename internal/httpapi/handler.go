@@ -39,6 +39,9 @@ func (h *Handler) Router() *chi.Mux {
 	r.Get("/healthz", h.handleHealth)
 	r.Get("/admin", h.handleAdminPage)
 	r.Post("/admin", h.handleAdminAction)
+	r.Post("/admin/settings/llm", h.handleSaveLLMSettings)
+	r.Post("/admin/settings/mode", h.handleSaveMode)
+	r.Post("/admin/settings/source", h.handleSaveSource)
 	r.Get("/admin/status", h.handleStatus)
 	r.Post("/admin/refresh", h.handleRefresh)
 	r.Post("/admin/reprocess", h.handleReprocess)
@@ -52,8 +55,13 @@ func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (h *Handler) handleSources(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, h.service.Sources())
+func (h *Handler) handleSources(w http.ResponseWriter, r *http.Request) {
+	sources, err := h.service.ListSources(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, sources)
 }
 
 func (h *Handler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
@@ -61,11 +69,6 @@ func (h *Handler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
 	status, err := h.service.FeedStatus(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -76,12 +79,13 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleAdminAction(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("lang"), "", "invalid form data")
+		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
 		return
 	}
 
 	action := r.FormValue("action")
 	sourceID := r.FormValue("source")
+	modeName := r.FormValue("mode")
 	lang := r.FormValue("lang")
 	limit := positiveInt(r.FormValue("limit"), 10)
 	log.Printf("admin action=%s source=%s limit=%d", action, sourceID, limit)
@@ -107,23 +111,134 @@ func (h *Handler) handleAdminAction(w http.ResponseWriter, r *http.Request) {
 			message = "reprocessed source " + sourceID
 		}
 	default:
-		h.redirectAdmin(w, r, sourceID, lang, "", "unknown admin action")
+		h.redirectAdmin(w, r, sourceID, modeName, lang, "", "unknown admin action")
 		return
 	}
 
 	if err != nil {
-		h.redirectAdmin(w, r, sourceID, lang, "", err.Error())
+		h.redirectAdmin(w, r, sourceID, modeName, lang, "", err.Error())
 		return
 	}
-	h.redirectAdmin(w, r, sourceID, lang, message, "")
+	h.redirectAdmin(w, r, sourceID, modeName, lang, message, "")
+}
+
+func (h *Handler) handleSaveLLMSettings(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	defer cancel()
+
+	current, err := h.service.GetLLMSettings(ctx)
+	if err != nil {
+		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
+		return
+	}
+	apiKey := strings.TrimSpace(r.FormValue("api_key"))
+	if apiKey == "" {
+		apiKey = current.APIKey
+	}
+
+	err = h.service.SaveLLMSettings(ctx, model.LLMSettings{
+		Provider: r.FormValue("provider"),
+		Model:    r.FormValue("model"),
+		APIKey:   apiKey,
+		BaseURL:  r.FormValue("base_url"),
+		Timeout:  r.FormValue("timeout"),
+	})
+	if err != nil {
+		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
+		return
+	}
+	h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("mode"), r.FormValue("lang"), "saved llm settings", "")
+}
+
+func (h *Handler) handleSaveMode(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", "invalid form data")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	defer cancel()
+
+	extras, err := parseExtraFieldsJSON(r.FormValue("extra_fields_json"))
+	if err != nil {
+		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", err.Error())
+		return
+	}
+	temperature, err := parseOptionalFloat(r.FormValue("temperature"))
+	if err != nil {
+		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", err.Error())
+		return
+	}
+	mode := model.Mode{
+		Name:            r.FormValue("name"),
+		SystemPrompt:    r.FormValue("system_prompt"),
+		TaskPrompt:      r.FormValue("task_prompt"),
+		Temperature:     temperature,
+		MaxOutputTokens: positiveInt(r.FormValue("max_output_tokens"), 0),
+		OutputSchema: model.OutputSchema{
+			Name:         strings.TrimSpace(r.FormValue("schema_name")),
+			TitleField:   strings.TrimSpace(r.FormValue("title_field")),
+			SummaryField: strings.TrimSpace(r.FormValue("summary_field")),
+			ContentField: strings.TrimSpace(r.FormValue("content_field")),
+			Fields: append([]model.OutputField{
+				{Name: strings.TrimSpace(r.FormValue("title_field")), Type: "string", Description: "Reader-facing title", Required: true},
+				{Name: strings.TrimSpace(r.FormValue("summary_field")), Type: "string", Description: "Short summary", Required: true},
+				{Name: strings.TrimSpace(r.FormValue("content_field")), Type: "string", Description: "RSS content body", Required: true},
+			}, extras...),
+		},
+	}
+	if err := h.service.SaveMode(ctx, mode); err != nil {
+		h.redirectAdmin(w, r, r.FormValue("source"), r.FormValue("selected_mode"), r.FormValue("lang"), "", err.Error())
+		return
+	}
+	h.redirectAdmin(w, r, r.FormValue("source"), mode.Name, r.FormValue("lang"), "saved mode "+mode.Name, "")
+}
+
+func (h *Handler) handleSaveSource(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.redirectAdmin(w, r, r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid form data")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	defer cancel()
+
+	refreshInterval, err := time.ParseDuration(strings.TrimSpace(r.FormValue("refresh_interval")))
+	if err != nil {
+		h.redirectAdmin(w, r, r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", "invalid refresh interval")
+		return
+	}
+	temperature, err := parseOptionalFloat(r.FormValue("temperature"))
+	if err != nil {
+		h.redirectAdmin(w, r, r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
+		return
+	}
+
+	source := model.Source{
+		ID:              r.FormValue("id"),
+		Name:            r.FormValue("name"),
+		URL:             r.FormValue("url"),
+		RefreshInterval: refreshInterval,
+		Enabled:         r.FormValue("enabled") != "",
+		MaxItems:        positiveInt(r.FormValue("max_items"), 20),
+		PipelineMode:    r.FormValue("pipeline_mode"),
+		SystemPrompt:    r.FormValue("system_prompt"),
+		TaskPrompt:      r.FormValue("task_prompt"),
+		MaxInputChars:   positiveInt(r.FormValue("max_input_chars"), 8000),
+		ExtractFull:     r.FormValue("extract_full_content") != "",
+		Temperature:     temperature,
+		MaxOutputTokens: positiveInt(r.FormValue("max_output_tokens"), 0),
+	}
+	if err := h.service.SaveSource(ctx, source); err != nil {
+		h.redirectAdmin(w, r, r.FormValue("selected_source"), r.FormValue("mode"), r.FormValue("lang"), "", err.Error())
+		return
+	}
+	h.redirectAdmin(w, r, source.ID, r.FormValue("mode"), r.FormValue("lang"), "saved source "+source.ID, "")
 }
 
 func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
 	sourceID := r.URL.Query().Get("source")
 	log.Printf("api refresh requested source=%s", sourceID)
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
@@ -146,11 +261,6 @@ func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleReprocess(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
 	sourceID := r.URL.Query().Get("source")
 	if sourceID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "source query parameter is required"})
@@ -170,11 +280,6 @@ func (h *Handler) handleReprocess(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleRawItems(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
 	sourceID := r.URL.Query().Get("source")
 	if sourceID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "source query parameter is required"})
@@ -198,8 +303,8 @@ func (h *Handler) handleFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	source, ok := h.service.Sources()[sourceID]
-	if !ok {
+	source, err := h.service.GetSource(r.Context(), sourceID)
+	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -225,6 +330,75 @@ func (h *Handler) handleFeed(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
+func (h *Handler) renderAdminPage(w http.ResponseWriter, r *http.Request, message, errText string) {
+	selectedSource := r.URL.Query().Get("source")
+	selectedMode := r.URL.Query().Get("mode")
+
+	settings, err := h.service.GetLLMSettings(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	sources, err := h.service.ListSources(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	modes, err := h.service.ListModes(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	status, err := h.service.FeedStatus(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if selectedSource == "" && len(sources) > 0 {
+		selectedSource = sources[0].ID
+	}
+	if selectedMode == "" && len(modes) > 0 {
+		selectedMode = modes[0].Name
+	}
+
+	rawItems := make([]model.RawItem, 0)
+	processedItems := make([]model.ProcessedItem, 0)
+	if selectedSource != "" {
+		rawItems, err = h.service.ListRawItems(r.Context(), selectedSource, 8)
+		if err != nil {
+			errText = err.Error()
+		}
+		processedItems, err = h.service.ListProcessedItems(r.Context(), selectedSource, 8)
+		if err != nil && errText == "" {
+			errText = err.Error()
+		}
+	}
+
+	vm := ui.BuildAdminPageView(r, settings, sources, modes, status, rawItems, processedItems, selectedSource, selectedMode, message, errText)
+	templ.Handler(ui.AdminPage(vm)).ServeHTTP(w, r)
+}
+
+func (h *Handler) redirectAdmin(w http.ResponseWriter, r *http.Request, sourceID, modeName, lang, message, errText string) {
+	values := r.URL.Query()
+	if sourceID != "" {
+		values.Set("source", sourceID)
+	}
+	if modeName != "" {
+		values.Set("mode", modeName)
+	}
+	if lang != "" {
+		values.Set("lang", lang)
+	}
+	if message != "" {
+		values.Set("message", message)
+	}
+	if errText != "" {
+		values.Set("error", errText)
+	}
+	http.Redirect(w, r, "/admin?"+values.Encode(), http.StatusSeeOther)
+}
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -248,59 +422,34 @@ func positiveInt(value string, defaultValue int) int {
 		return defaultValue
 	}
 	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed <= 0 {
+	if err != nil || parsed < 0 {
 		return defaultValue
 	}
 	return parsed
 }
 
-func (h *Handler) renderAdminPage(w http.ResponseWriter, r *http.Request, message, errText string) {
-	selectedSource := r.URL.Query().Get("source")
-	status, err := h.service.FeedStatus(r.Context())
+func parseOptionalFloat(value string) (*float64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return nil, err
 	}
-
-	if selectedSource == "" {
-		for id := range h.service.Sources() {
-			selectedSource = id
-			break
-		}
-	}
-
-	rawItems := make([]model.RawItem, 0)
-	processedItems := make([]model.ProcessedItem, 0)
-	if selectedSource != "" {
-		rawItems, err = h.service.ListRawItems(r.Context(), selectedSource, 8)
-		if err != nil {
-			errText = err.Error()
-		}
-		processedItems, err = h.service.ListProcessedItems(r.Context(), selectedSource, 8)
-		if err != nil && errText == "" {
-			errText = err.Error()
-		}
-	}
-
-	vm := ui.BuildAdminPageView(r, h.service.Sources(), status, rawItems, processedItems, selectedSource, message, errText)
-	templ.Handler(ui.AdminPage(vm)).ServeHTTP(w, r)
+	return &parsed, nil
 }
 
-func (h *Handler) redirectAdmin(w http.ResponseWriter, r *http.Request, sourceID, lang, message, errText string) {
-	values := r.URL.Query()
-	if sourceID != "" {
-		values.Set("source", sourceID)
+func parseExtraFieldsJSON(value string) ([]model.OutputField, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
 	}
-	if lang != "" {
-		values.Set("lang", lang)
+	var fields []model.OutputField
+	if err := json.Unmarshal([]byte(value), &fields); err != nil {
+		return nil, err
 	}
-	if message != "" {
-		values.Set("message", message)
-	}
-	if errText != "" {
-		values.Set("error", errText)
-	}
-	http.Redirect(w, r, "/admin?"+values.Encode(), http.StatusSeeOther)
+	return fields, nil
 }
 
 type statusRecorder struct {

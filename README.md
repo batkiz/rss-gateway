@@ -14,6 +14,7 @@
 - 支持自定义 OpenAI 兼容 `base_url`
 - 支持基于已存储原始数据重处理最近条目
 - 提供一个简单的中英文管理页面
+- 支持在管理页面中编辑 LLM 设置、modes 和 sources
 
 ## 快速开始
 
@@ -49,6 +50,15 @@ Invoke-WebRequest -Method POST "http://localhost:8080/admin/reprocess?source=hac
 
 当前只支持 TOML 配置。
 
+`/admin` 现在可以直接编辑运行时配置：
+
+- LLM provider / model / API key / base URL / timeout
+- modes
+- sources
+
+这些数据会保存到 SQLite，并在保存后立即生效。  
+TOML 仍然保留，但主要用于首次启动时的初始化 seed；数据库里一旦已有运行时配置，后续启动不会再用 TOML 覆盖它们。
+
 `llm.base_url` 可用于接入 OpenAI 兼容网关：
 
 ```toml
@@ -61,7 +71,7 @@ base_url = "https://api.openai.com/v1"
 
 ## Mode 配置
 
-mode 完全由配置驱动。先定义 mode，再让 source 引用：
+mode 仍然支持通过 TOML 做初始定义，启动首次 seed 后也可以直接在 `/admin` 中编辑。先定义 mode，再让 source 引用：
 
 ```toml
 [modes.summary]
@@ -94,6 +104,9 @@ source 级别的 `pipeline.system_prompt`、`pipeline.task_prompt` 可以覆盖 
 ## 管理接口
 
 - `GET /admin`：管理页面，支持 `?lang=zh|en`
+- `POST /admin/settings/llm`：保存运行时 LLM 配置
+- `POST /admin/settings/mode`：保存 mode
+- `POST /admin/settings/source`：保存 source
 - `GET /admin/status`：按 source 查看刷新状态和条目计数
 - `POST /admin/refresh?source=<id>`：拉取并处理最新 feed
 - `POST /admin/reprocess?source=<id>&limit=<n>`：基于原始条目重新跑 LLM

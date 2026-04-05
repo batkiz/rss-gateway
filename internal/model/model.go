@@ -18,6 +18,23 @@ type Source struct {
 	MaxOutputTokens int
 }
 
+type LLMSettings struct {
+	Provider string
+	Model    string
+	APIKey   string
+	BaseURL  string
+	Timeout  string
+}
+
+type Mode struct {
+	Name            string
+	SystemPrompt    string
+	TaskPrompt      string
+	Temperature     *float64
+	MaxOutputTokens int
+	OutputSchema    OutputSchema
+}
+
 type RawItem struct {
 	SourceID    string
 	GUID        string

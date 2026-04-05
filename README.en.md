@@ -14,6 +14,7 @@ A Go-based RSS gateway that adds LLM processing to upstream feeds and emits tran
 - Support custom OpenAI-compatible `base_url`
 - Reprocess recent items from stored raw content
 - Provide a simple bilingual admin UI
+- Edit runtime LLM settings, modes, and sources from the admin UI
 
 ## Quick Start
 
@@ -49,6 +50,15 @@ Invoke-WebRequest -Method POST "http://localhost:8080/admin/reprocess?source=hac
 
 Only TOML is supported.
 
+`/admin` can now edit runtime configuration directly:
+
+- LLM provider / model / API key / base URL / timeout
+- modes
+- sources
+
+These values are stored in SQLite and apply immediately after save.  
+TOML is still supported, but mainly as the initial seed on first startup. Once runtime config already exists in SQLite, later restarts will not overwrite it from TOML.
+
 `llm.base_url` can be used with OpenAI-compatible gateways:
 
 ```toml
@@ -61,7 +71,7 @@ base_url = "https://api.openai.com/v1"
 
 ## Mode Configuration
 
-Modes are fully config-driven. Define a mode, then reference it from a source:
+Modes can still be defined in TOML for the initial seed, and then edited directly in `/admin`. Define a mode, then reference it from a source:
 
 ```toml
 [modes.summary]
@@ -94,6 +104,9 @@ Source-level `pipeline.system_prompt` and `pipeline.task_prompt` can override mo
 ## Admin Endpoints
 
 - `GET /admin`: admin page, supports `?lang=zh|en`
+- `POST /admin/settings/llm`: save runtime LLM settings
+- `POST /admin/settings/mode`: save a mode
+- `POST /admin/settings/source`: save a source
 - `GET /admin/status`: per-source refresh status and item counts
 - `POST /admin/refresh?source=<id>`: fetch and process the latest feed
 - `POST /admin/reprocess?source=<id>&limit=<n>`: rerun LLM processing from stored raw items

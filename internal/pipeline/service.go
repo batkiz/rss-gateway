@@ -2,8 +2,10 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,10 +15,17 @@ import (
 	"github.com/batkiz/rss-gateway/internal/fetcher"
 	"github.com/batkiz/rss-gateway/internal/llm"
 	"github.com/batkiz/rss-gateway/internal/model"
-	"github.com/batkiz/rss-gateway/internal/storage"
 )
 
 type Store interface {
+	GetLLMSettings(ctx context.Context) (model.LLMSettings, error)
+	UpsertLLMSettings(ctx context.Context, settings model.LLMSettings) error
+	ListModes(ctx context.Context) ([]model.Mode, error)
+	GetMode(ctx context.Context, name string) (model.Mode, error)
+	UpsertMode(ctx context.Context, mode model.Mode) error
+	ListSources(ctx context.Context) ([]model.Source, error)
+	GetSource(ctx context.Context, id string) (model.Source, error)
+	UpsertSource(ctx context.Context, source model.Source) error
 	UpsertRawItem(ctx context.Context, item model.RawItem) error
 	ListRawItems(ctx context.Context, sourceID string, limit int) ([]model.RawItem, error)
 	GetProcessedInputHash(ctx context.Context, sourceID, guid string) (string, bool, error)
@@ -28,52 +37,156 @@ type Store interface {
 }
 
 type Service struct {
-	sources   map[string]model.Source
-	modes     map[string]config.ModeConfig
-	fetcher   *fetcher.Fetcher
-	processor llm.Processor
-	store     Store
+	fetcher *fetcher.Fetcher
+	store   Store
 }
 
-func NewService(cfg config.Config, fetcher *fetcher.Fetcher, processor llm.Processor, store *storage.SQLiteStore) *Service {
-	sources := make(map[string]model.Source, len(cfg.Sources))
-	for _, source := range cfg.Sources {
-		enabled := true
-		if source.Enabled != nil {
-			enabled = *source.Enabled
-		}
-		sources[source.ID] = model.Source{
-			ID:              source.ID,
-			Name:            source.Name,
-			URL:             source.URL,
-			RefreshInterval: source.RefreshInterval.Duration,
-			Enabled:         enabled,
-			MaxItems:        source.MaxItems,
-			PipelineMode:    source.Pipeline.Mode,
-			SystemPrompt:    source.Pipeline.SystemPrompt,
-			TaskPrompt:      source.Pipeline.TaskPrompt,
-			MaxInputChars:   source.Pipeline.MaxInputChars,
-			ExtractFull:     source.Pipeline.ExtractFullContent,
-			Temperature:     source.Pipeline.Temperature,
-			MaxOutputTokens: source.Pipeline.MaxOutputTokens,
-		}
-	}
+func NewService(fetcher *fetcher.Fetcher, store Store) *Service {
 	return &Service{
-		sources:   sources,
-		modes:     cfg.Modes,
-		fetcher:   fetcher,
-		processor: processor,
-		store:     store,
+		fetcher: fetcher,
+		store:   store,
 	}
 }
 
-func (s *Service) Sources() map[string]model.Source {
-	return s.sources
+func (s *Service) ListSources(ctx context.Context) ([]model.Source, error) {
+	sources, err := s.store.ListSources(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(sources, func(i, j int) bool {
+		return sources[i].ID < sources[j].ID
+	})
+	return sources, nil
+}
+
+func (s *Service) SourcesMap(ctx context.Context) (map[string]model.Source, error) {
+	sources, err := s.ListSources(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]model.Source, len(sources))
+	for _, source := range sources {
+		out[source.ID] = source
+	}
+	return out, nil
+}
+
+func (s *Service) GetSource(ctx context.Context, sourceID string) (model.Source, error) {
+	return s.store.GetSource(ctx, sourceID)
+}
+
+func (s *Service) ListModes(ctx context.Context) ([]model.Mode, error) {
+	return s.store.ListModes(ctx)
+}
+
+func (s *Service) GetMode(ctx context.Context, modeName string) (model.Mode, error) {
+	return s.store.GetMode(ctx, modeName)
+}
+
+func (s *Service) GetLLMSettings(ctx context.Context) (model.LLMSettings, error) {
+	return s.store.GetLLMSettings(ctx)
+}
+
+func (s *Service) SaveLLMSettings(ctx context.Context, settings model.LLMSettings) error {
+	settings.Provider = strings.TrimSpace(settings.Provider)
+	settings.Model = strings.TrimSpace(settings.Model)
+	settings.APIKey = strings.TrimSpace(settings.APIKey)
+	settings.BaseURL = strings.TrimSpace(settings.BaseURL)
+	settings.Timeout = strings.TrimSpace(settings.Timeout)
+
+	if settings.Provider == "" {
+		return errors.New("llm provider is required")
+	}
+	if settings.Model == "" {
+		return errors.New("llm model is required")
+	}
+	if settings.APIKey == "" {
+		return errors.New("llm api key is required")
+	}
+	if settings.BaseURL == "" {
+		settings.BaseURL = "https://api.openai.com/v1"
+	}
+	if settings.Timeout == "" {
+		settings.Timeout = "60s"
+	}
+	if _, err := time.ParseDuration(settings.Timeout); err != nil {
+		return fmt.Errorf("invalid llm timeout: %w", err)
+	}
+	return s.store.UpsertLLMSettings(ctx, settings)
+}
+
+func (s *Service) SaveMode(ctx context.Context, mode model.Mode) error {
+	mode.Name = strings.TrimSpace(mode.Name)
+	mode.SystemPrompt = strings.TrimSpace(mode.SystemPrompt)
+	mode.TaskPrompt = strings.TrimSpace(mode.TaskPrompt)
+	mode.OutputSchema.Name = strings.TrimSpace(mode.OutputSchema.Name)
+	mode.OutputSchema.TitleField = strings.TrimSpace(mode.OutputSchema.TitleField)
+	mode.OutputSchema.SummaryField = strings.TrimSpace(mode.OutputSchema.SummaryField)
+	mode.OutputSchema.ContentField = strings.TrimSpace(mode.OutputSchema.ContentField)
+
+	if mode.Name == "" {
+		return errors.New("mode name is required")
+	}
+	if mode.OutputSchema.Name == "" {
+		mode.OutputSchema.Name = mode.Name
+	}
+	if mode.OutputSchema.TitleField == "" {
+		mode.OutputSchema.TitleField = "title"
+	}
+	if mode.OutputSchema.SummaryField == "" {
+		mode.OutputSchema.SummaryField = "summary"
+	}
+	if mode.OutputSchema.ContentField == "" {
+		mode.OutputSchema.ContentField = "content"
+	}
+	if len(mode.OutputSchema.Fields) == 0 {
+		mode.OutputSchema.Fields = defaultSchemaFields(mode.OutputSchema)
+	}
+	if err := validateSchemaFields(mode.OutputSchema); err != nil {
+		return err
+	}
+	return s.store.UpsertMode(ctx, mode)
+}
+
+func (s *Service) SaveSource(ctx context.Context, source model.Source) error {
+	source.ID = strings.TrimSpace(source.ID)
+	source.Name = strings.TrimSpace(source.Name)
+	source.URL = strings.TrimSpace(source.URL)
+	source.PipelineMode = strings.TrimSpace(source.PipelineMode)
+	source.SystemPrompt = strings.TrimSpace(source.SystemPrompt)
+	source.TaskPrompt = strings.TrimSpace(source.TaskPrompt)
+
+	if source.ID == "" {
+		return errors.New("source id is required")
+	}
+	if source.URL == "" {
+		return fmt.Errorf("source %s url is required", source.ID)
+	}
+	if source.PipelineMode == "" {
+		return fmt.Errorf("source %s pipeline mode is required", source.ID)
+	}
+	if source.RefreshInterval <= 0 {
+		source.RefreshInterval = 30 * time.Minute
+	}
+	if source.MaxItems <= 0 {
+		source.MaxItems = 20
+	}
+	if source.MaxInputChars <= 0 {
+		source.MaxInputChars = 8000
+	}
+	if _, err := s.store.GetMode(ctx, source.PipelineMode); err != nil {
+		return fmt.Errorf("source %s references undefined mode %q", source.ID, source.PipelineMode)
+	}
+	return s.store.UpsertSource(ctx, source)
 }
 
 func (s *Service) RefreshAll(ctx context.Context) error {
+	sources, err := s.ListSources(ctx)
+	if err != nil {
+		return err
+	}
 	group, groupCtx := errgroup.WithContext(ctx)
-	for _, source := range s.sources {
+	for _, source := range sources {
 		source := source
 		if !source.Enabled {
 			continue
@@ -89,9 +202,9 @@ func (s *Service) RefreshAll(ctx context.Context) error {
 }
 
 func (s *Service) RefreshSource(ctx context.Context, sourceID string) error {
-	source, ok := s.sources[sourceID]
-	if !ok {
-		return fmt.Errorf("source %s not found", sourceID)
+	source, err := s.store.GetSource(ctx, sourceID)
+	if err != nil {
+		return fmt.Errorf("source %s not found: %w", sourceID, err)
 	}
 
 	items, err := s.fetcher.Fetch(ctx, source)
@@ -130,9 +243,9 @@ func (s *Service) RefreshSource(ctx context.Context, sourceID string) error {
 }
 
 func (s *Service) ReprocessSource(ctx context.Context, sourceID string, limit int) error {
-	source, ok := s.sources[sourceID]
-	if !ok {
-		return fmt.Errorf("source %s not found", sourceID)
+	source, err := s.store.GetSource(ctx, sourceID)
+	if err != nil {
+		return fmt.Errorf("source %s not found: %w", sourceID, err)
 	}
 	if limit <= 0 {
 		limit = source.MaxItems
@@ -173,7 +286,15 @@ func (s *Service) ListRawItems(ctx context.Context, sourceID string, limit int) 
 	return s.store.ListRawItems(ctx, sourceID, limit)
 }
 
+func (s *Service) FeedState(ctx context.Context, sourceID string) (model.FeedState, error) {
+	return s.store.GetFeedState(ctx, sourceID)
+}
+
 func (s *Service) FeedStatus(ctx context.Context) ([]model.FeedState, error) {
+	sources, err := s.ListSources(ctx)
+	if err != nil {
+		return nil, err
+	}
 	states, err := s.store.ListFeedStates(ctx)
 	if err != nil {
 		return nil, err
@@ -184,8 +305,9 @@ func (s *Service) FeedStatus(ctx context.Context) ([]model.FeedState, error) {
 		byID[state.SourceID] = state
 	}
 
-	out := make([]model.FeedState, 0, len(s.sources))
-	for id := range s.sources {
+	out := make([]model.FeedState, 0, len(sources))
+	for _, source := range sources {
+		id := source.ID
 		state, ok := byID[id]
 		if !ok {
 			var err error
@@ -209,8 +331,15 @@ func (s *Service) processRawItem(ctx context.Context, source model.Source, item 
 		return false, nil
 	}
 
-	modeCfg := s.modeConfig(source.PipelineMode)
-	resp, err := s.processor.Process(ctx, model.ProcessRequest{
+	modeCfg, err := s.modeConfig(ctx, source.PipelineMode)
+	if err != nil {
+		return false, err
+	}
+	processor, err := s.processorFor(ctx)
+	if err != nil {
+		return false, err
+	}
+	resp, err := processor.Process(ctx, model.ProcessRequest{
 		Mode:            source.PipelineMode,
 		Title:           fallbackTitle(item.Title, item.Link),
 		Link:            item.Link,
@@ -220,7 +349,7 @@ func (s *Service) processRawItem(ctx context.Context, source model.Source, item 
 		MaxInputChars:   source.MaxInputChars,
 		Temperature:     firstNonNilFloat(source.Temperature, modeCfg.Temperature),
 		MaxOutputTokens: firstNonZero(source.MaxOutputTokens, modeCfg.MaxOutputTokens),
-		OutputSchema:    toModelSchema(modeCfg.OutputSchema),
+		OutputSchema:    modeCfg.OutputSchema,
 	})
 	if err != nil {
 		log.Printf("process %s/%s: %v", source.ID, item.GUID, err)
@@ -281,48 +410,58 @@ func firstNonNilFloat(values ...*float64) *float64 {
 	return nil
 }
 
-func (s *Service) modeConfig(mode string) config.ModeConfig {
-	if cfg, ok := s.modes[mode]; ok {
-		return cfg
+func (s *Service) modeConfig(ctx context.Context, mode string) (model.Mode, error) {
+	if strings.TrimSpace(mode) == "" {
+		return model.Mode{}, nil
 	}
-	return config.ModeConfig{}
+	cfg, err := s.store.GetMode(ctx, mode)
+	if err != nil {
+		return model.Mode{}, err
+	}
+	return cfg, nil
 }
 
-func toModelSchema(cfg config.OutputSchemaConfig) model.OutputSchema {
-	if cfg.Name == "" {
-		cfg.Name = "rss_output"
+func (s *Service) processorFor(ctx context.Context) (llm.Processor, error) {
+	settings, err := s.store.GetLLMSettings(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if cfg.TitleField == "" {
-		cfg.TitleField = "title"
-	}
-	if cfg.SummaryField == "" {
-		cfg.SummaryField = "summary"
-	}
-	if cfg.ContentField == "" {
-		cfg.ContentField = "content"
-	}
-	fields := []model.OutputField{
-		{Name: cfg.TitleField, Type: "string", Description: "Reader-facing title", Required: true},
-		{Name: cfg.SummaryField, Type: "string", Description: "Short summary", Required: true},
-		{Name: cfg.ContentField, Type: "string", Description: "RSS content body", Required: true},
-	}
-	for _, extra := range cfg.ExtraFields {
-		required := true
-		if extra.Required != nil {
-			required = *extra.Required
-		}
-		fields = append(fields, model.OutputField{
-			Name:        extra.Name,
-			Type:        extra.Type,
-			Description: extra.Description,
-			Required:    required,
+	switch settings.Provider {
+	case "", "openai":
+		return llm.NewOpenAIProcessor(config.LLMConfig{
+			Provider: settings.Provider,
+			Model:    settings.Model,
+			APIKey:   settings.APIKey,
+			BaseURL:  settings.BaseURL,
+			Timeout:  settings.Timeout,
 		})
+	default:
+		return nil, fmt.Errorf("unsupported llm provider: %s", settings.Provider)
 	}
-	return model.OutputSchema{
-		Name:         cfg.Name,
-		TitleField:   cfg.TitleField,
-		SummaryField: cfg.SummaryField,
-		ContentField: cfg.ContentField,
-		Fields:       fields,
+}
+
+func validateSchemaFields(schema model.OutputSchema) error {
+	if schema.TitleField == "" || schema.SummaryField == "" || schema.ContentField == "" {
+		return errors.New("output schema title, summary, and content fields are required")
+	}
+	seen := map[string]struct{}{}
+	for _, field := range schema.Fields {
+		field.Name = strings.TrimSpace(field.Name)
+		if field.Name == "" {
+			return errors.New("output schema field name is required")
+		}
+		if _, ok := seen[field.Name]; ok {
+			return fmt.Errorf("duplicate output schema field %q", field.Name)
+		}
+		seen[field.Name] = struct{}{}
+	}
+	return nil
+}
+
+func defaultSchemaFields(schema model.OutputSchema) []model.OutputField {
+	return []model.OutputField{
+		{Name: schema.TitleField, Type: "string", Description: "Reader-facing title", Required: true},
+		{Name: schema.SummaryField, Type: "string", Description: "Short summary", Required: true},
+		{Name: schema.ContentField, Type: "string", Description: "RSS content body", Required: true},
 	}
 }

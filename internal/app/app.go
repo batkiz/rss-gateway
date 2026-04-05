@@ -11,7 +11,6 @@ import (
 	"github.com/batkiz/rss-gateway/internal/config"
 	"github.com/batkiz/rss-gateway/internal/fetcher"
 	"github.com/batkiz/rss-gateway/internal/httpapi"
-	"github.com/batkiz/rss-gateway/internal/llm"
 	"github.com/batkiz/rss-gateway/internal/pipeline"
 	"github.com/batkiz/rss-gateway/internal/storage"
 )
@@ -29,25 +28,27 @@ func New(cfg config.Config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open storage: %w", err)
 	}
+	if err := store.SeedRuntimeConfig(context.Background(), cfg); err != nil {
+		return nil, fmt.Errorf("seed runtime config: %w", err)
+	}
+	log.Printf("runtime config checked from toml seed sources=%d modes=%d", len(cfg.Sources), len(cfg.Modes))
 
 	log.Printf("initializing feed fetcher timeout=%s", (30 * time.Second).String())
 	fetch := fetcher.New(30 * time.Second)
 
-	var processor llm.Processor
-	switch cfg.LLM.Provider {
-	case "openai":
-		log.Printf("initializing llm provider=%s model=%s base_url=%s", cfg.LLM.Provider, cfg.LLM.Model, cfg.LLM.BaseURL)
-		processor, err = llm.NewOpenAIProcessor(cfg.LLM)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("unsupported llm provider: %s", cfg.LLM.Provider)
+	settings, err := store.GetLLMSettings(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("load llm settings: %w", err)
 	}
+	log.Printf("runtime llm settings provider=%s model=%s base_url=%s", settings.Provider, settings.Model, settings.BaseURL)
 
-	service := pipeline.NewService(cfg, fetch, processor, store)
+	service := pipeline.NewService(fetch, store)
 	handler := httpapi.New(service)
-	log.Printf("http handler initialized sources=%d", len(service.Sources()))
+	sources, err := service.ListSources(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("list sources: %w", err)
+	}
+	log.Printf("http handler initialized sources=%d", len(sources))
 	return &App{
 		store:   store,
 		service: service,
@@ -89,40 +90,48 @@ func (a *App) Close() error {
 }
 
 func (a *App) runScheduler(ctx context.Context) {
-	tickers := make(map[string]*time.Ticker)
-	for id, source := range a.service.Sources() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	log.Printf("scheduler polling loop started interval=1m")
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("scheduler shutting down")
+			return
+		case <-ticker.C:
+			a.runScheduledRefreshes(ctx)
+		}
+	}
+}
+
+func (a *App) runScheduledRefreshes(ctx context.Context) {
+	sources, err := a.service.ListSources(ctx)
+	if err != nil {
+		log.Printf("scheduler list sources: %v", err)
+		return
+	}
+	now := time.Now().UTC()
+	for _, source := range sources {
 		if !source.Enabled {
-			log.Printf("scheduler skip source=%s enabled=false", id)
 			continue
 		}
-		ticker := time.NewTicker(source.RefreshInterval)
-		tickers[id] = ticker
-		log.Printf("scheduler registered source=%s interval=%s", id, source.RefreshInterval)
-		go func(sourceID string, ticker *time.Ticker) {
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					log.Printf("scheduler worker stopping source=%s", sourceID)
-					return
-				case <-ticker.C:
-					log.Printf("scheduled refresh start source=%s", sourceID)
-					refreshCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
-					err := a.service.RefreshSource(refreshCtx, sourceID)
-					cancel()
-					if err != nil {
-						log.Printf("scheduled refresh %s: %v", sourceID, err)
-					} else {
-						log.Printf("scheduled refresh complete source=%s", sourceID)
-					}
-				}
-			}
-		}(id, ticker)
-	}
-
-	<-ctx.Done()
-	log.Printf("scheduler shutting down")
-	for _, ticker := range tickers {
-		ticker.Stop()
+		state, err := a.service.FeedState(ctx, source.ID)
+		if err != nil {
+			log.Printf("scheduler state source=%s: %v", source.ID, err)
+			continue
+		}
+		if !state.LastSuccessAt.IsZero() && now.Sub(state.LastSuccessAt) < source.RefreshInterval {
+			continue
+		}
+		log.Printf("scheduled refresh start source=%s interval=%s", source.ID, source.RefreshInterval)
+		refreshCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		err = a.service.RefreshSource(refreshCtx, source.ID)
+		cancel()
+		if err != nil {
+			log.Printf("scheduled refresh %s: %v", source.ID, err)
+			continue
+		}
+		log.Printf("scheduled refresh complete source=%s", source.ID)
 	}
 }
